@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(~{::body})}">
+<body>
+    <div class="header">
+        <h1>设备 & 点位配置</h1>
+    </div>
+    <div class="grid">
+        <div class="card">
+            <h2>添加设备</h2>
+            <form th:action="@{/devices}" th:object="${device}" method="post">
+                <input type="text" th:field="*{name}" placeholder="设备名称">
+                <select th:field="*{protocol}">
+                    <option value="modbus-tcp">Modbus TCP</option>
+                    <option value="opcua">OPC UA</option>
+                </select>
+                <input type="text" th:field="*{connectionString}" placeholder="连接字符串">
+                <button type="submit">保存</button>
+            </form>
+        </div>
+        <div th:each="device : ${devices}" class="card">
+            <h3 th:text="${device.name}"></h3>
+            <p th:text="'协议: ' + ${device.protocol}"></p>
+            <p th:text="'连接: ' + ${device.connectionString}"></p>
+            <a th:href="@{/devices/{id}/tags/add(id=${device.id})}">添加点位</a>
+            <ul>
+                <li th:each="tag : ${device.tags}" th:text="${tag.name} + ' (' + ${tag.address} + ')'"></li>
+            </ul>
+            <a th:href="@{/devices/edit/{id}(id=${device.id})}">编辑</a>
+            <form th:action="@{/devices/delete/{id}(id=${device.id})}" method="post" style="display:inline;">
+                <button type="submit">删除</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

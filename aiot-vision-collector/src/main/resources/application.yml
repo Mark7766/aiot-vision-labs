@@ -1,0 +1,27 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    # 文件模式 H2，去掉 AUTO_SERVER 与 DB_CLOSE_ON_EXIT 以兼容 2.x 版本
+    # 保留 DB_CLOSE_DELAY=-1 保证连接关闭后不立即卸载, MODE=MySQL 方便未来迁移
+    url: jdbc:h2:file:./data/visiondb;MODE=MySQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+  h2:
+    console:
+      enabled: true
+
+# 采集器配置: simulation 模式用于在无真实 PLC 时生成随机数据
+collector:
+  simulation:
+    enabled: false
+
+logging:
+  level:
+    aiot.vision.collector: INFO

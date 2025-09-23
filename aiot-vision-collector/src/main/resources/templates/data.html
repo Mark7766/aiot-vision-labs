@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(~{::body})}">
+<body>
+    <div class="header">
+        <h1>实时采集数据</h1>
+        <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap;">
+            <form th:action="@{/data/collect}" method="post" style="display:inline;">
+                <button type="submit">手动采集一次</button>
+            </form>
+            <button onclick="location.reload()">立即刷新</button>
+            <button id="autoBtn" onclick="toggleAuto()">开启自动刷新</button>
+        </div>
+    </div>
+    <div class="grid" th:if="${!#lists.isEmpty(records)}">
+        <div th:each="record : ${records}" class="card">
+            <h3>记录 ID: <span th:text="${record.id}"></span></h3>
+            <p th:text="'时间: ' + ${#temporals.format(record.timestamp, 'yyyy-MM-dd HH:mm:ss')}"></p>
+            <pre th:text="${record.value}"></pre> <!-- JSON 数据展示 -->
+        </div>
+    </div>
+    <div class="card" th:if="${#lists.isEmpty(records)}">
+        <h3>暂无数据</h3>
+        <p>可能的原因：</p>
+        <ul>
+            <li>还没有配置设备或点位（前往 设备配置）</li>
+            <li>PLC 连接字符串无效或网络不通</li>
+            <li>等待定时任务（5 秒周期）尚未执行</li>
+        </ul>
+        <p>可以先添加一个 connectionString = <code>sim://demo</code> 的模拟设备或开启配置项 <code>collector.simulation.enabled=true</code>。</p>
+    </div>
+    <script>
+        let auto = false;
+        let timer = null;
+        function toggleAuto(){
+            auto = !auto;
+            const btn = document.getElementById('autoBtn');
+            if(auto){
+                btn.textContent='关闭自动刷新';
+                timer = setInterval(()=>window.location.reload(),5000);
+            } else {
+                btn.textContent='开启自动刷新';
+                if(timer) clearInterval(timer);
+            }
+        }
+    </script>
+</body>
+</html>
