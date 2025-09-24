@@ -10,8 +10,8 @@
             <form th:action="@{/devices}" th:object="${device}" method="post">
                 <input type="text" th:field="*{name}" placeholder="设备名称">
                 <select th:field="*{protocol}">
-                    <option value="modbus-tcp">Modbus TCP</option>
-                    <option value="opcua">OPC UA</option>
+<!--                    <option value="modbus-tcp">Modbus TCP</option>-->
+                    <option value="opcua" selected="selected">OPC UA</option>
                 </select>
                 <input type="text" th:field="*{connectionString}" placeholder="连接字符串">
                 <button type="submit">保存</button>

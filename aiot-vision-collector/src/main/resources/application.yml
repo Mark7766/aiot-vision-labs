@@ -17,11 +17,6 @@ spring:
     console:
       enabled: true
 
-# 采集器配置: simulation 模式用于在无真实 PLC 时生成随机数据
-collector:
-  simulation:
-    enabled: false
-
 logging:
   level:
     aiot.vision.collector: INFO

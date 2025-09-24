@@ -14,7 +14,7 @@
 	<name>aiot-vision-collector</name>
 	<properties>
 		<java.version>17</java.version>
-		<plc4x.version>0.12.0</plc4x.version>
+		<plc4x.version>0.13.1</plc4x.version>
 		<milo.version>0.6.13</milo.version>
 	</properties>
 	<dependencies>
@@ -71,11 +71,13 @@
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
 		</dependency>
-		<!-- Eclipse Milo for endpoint discovery / listing -->
+		<!-- Eclipse Milo 仅用于测试（例如端点列举），生产采集逻辑已移除 -->
 		<dependency>
 			<groupId>org.eclipse.milo</groupId>
 			<artifactId>sdk-client</artifactId>
 			<version>${milo.version}</version>
+			<scope>test</scope>
+			<optional>true</optional>
 		</dependency>
 	</dependencies>
 

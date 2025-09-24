@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(~{::body})}">
+<body>
+<div class="header">
+    <h1>标签历史数据</h1>
+    <p th:if="${error}" th:text="${error}" style="color:#ff6666;"></p>
+    <div th:if="${device}" style="margin-bottom:1rem;">
+        <a href="/data" class="button-link">返回实时数据</a>
+        <h2 th:text="${device.name} + ' - ' + ${tagName}"></h2>
+    </div>
+</div>
+<div class="card" th:if="${#lists.isEmpty(entries)}">
+    <p>暂无历史数据</p>
+</div>
+<div class="card" th:if="${!#lists.isEmpty(entries)}" style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+        <thead>
+        <tr style="text-align:left;border-bottom:1px solid #00bfff;">
+            <th style="padding:4px;">时间</th>
+            <th style="padding:4px;">值</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="e : ${entries}">
+            <td style="padding:4px;font-family:monospace;" th:text="${e.timestamp}"></td>
+            <td style="padding:4px;font-family:monospace;" th:text="${e.value}"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+</body>
+</html>
+

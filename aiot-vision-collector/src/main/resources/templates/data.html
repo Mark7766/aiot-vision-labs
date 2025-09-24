@@ -1,47 +1,106 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(~{::body})}">
 <body>
-    <div class="header">
-        <h1>实时采集数据</h1>
-        <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap;">
-            <form th:action="@{/data/collect}" method="post" style="display:inline;">
-                <button type="submit">手动采集一次</button>
-            </form>
-            <button onclick="location.reload()">立即刷新</button>
-            <button id="autoBtn" onclick="toggleAuto()">开启自动刷新</button>
-        </div>
+<div class="header">
+    <h1>实时设备数据</h1>
+    <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap;">
+        <form th:action="@{/data/collect}" method="post" style="display:inline;">
+            <button type="submit">手动采集一次</button>
+        </form>
+        <button id="autoBtn" type="button" onclick="toggleAuto()">开启自动刷新</button>
+        <span id="lastRefresh" style="align-self:center;font-size:0.9rem;color:#ccc;"></span>
     </div>
-    <div class="grid" th:if="${!#lists.isEmpty(records)}">
-        <div th:each="record : ${records}" class="card">
-            <h3>记录 ID: <span th:text="${record.id}"></span></h3>
-            <p th:text="'时间: ' + ${#temporals.format(record.timestamp, 'yyyy-MM-dd HH:mm:ss')}"></p>
-            <pre th:text="${record.value}"></pre> <!-- JSON 数据展示 -->
-        </div>
+</div>
+<div th:if="${#lists.isEmpty(devices)}" class="card">
+    <h3>暂无设备数据</h3>
+    <p>请前往 设备配置 页面添加设备与标签，或等待定时采集。</p>
+</div>
+<div class="grid" th:if="${!#lists.isEmpty(devices)}">
+    <div class="card" th:each="dev : ${devices}">
+        <h3 th:text="${dev.deviceName} + ' (ID:' + ${dev.deviceId} + ')'">设备</h3>
+        <p style="margin:0.3rem 0;font-size:0.85rem;">
+            协议: <span th:text="${dev.protocol}"></span>
+            | 连接: <span th:text="${dev.connectionString}"></span>
+            | 最新时间: <strong th:text="${dev.timestamp}"></strong>
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+            <thead>
+            <tr style="text-align:left;border-bottom:1px solid #00bfff;">
+                <th style="padding:4px;">Tag</th>
+                <th style="padding:4px;">地址</th>
+                <th style="padding:4px;">当前值</th>
+            </tr>
+            </thead>
+            <tbody>
+            <!-- Safe alternative: use data-* attributes instead of th:onclick -->
+            <tr th:each="tag : ${dev.tags}" class="tag-row" th:attr="data-device-id=${dev.deviceId},data-tag-name=${tag.name}" style="cursor:pointer;border-bottom:1px solid rgba(0,191,255,0.2);">
+                <td style="padding:4px;" th:text="${tag.name}"></td>
+                <td style="padding:4px;" th:text="${tag.address}"></td>
+                <td style="padding:4px;font-family:monospace;" th:text="${tag.value}"></td>
+            </tr>
+            <tr th:if="${#lists.isEmpty(dev.tags)}">
+                <td colspan="3" style="padding:4px;color:#ffb347;">未配置标签或尚无数据</td>
+            </tr>
+            </tbody>
+        </table>
     </div>
-    <div class="card" th:if="${#lists.isEmpty(records)}">
-        <h3>暂无数据</h3>
-        <p>可能的原因：</p>
-        <ul>
-            <li>还没有配置设备或点位（前往 设备配置）</li>
-            <li>PLC 连接字符串无效或网络不通</li>
-            <li>等待定时任务（5 秒周期）尚未执行</li>
-        </ul>
-        <p>可以先添加一个 connectionString = <code>sim://demo</code> 的模拟设备或开启配置项 <code>collector.simulation.enabled=true</code>。</p>
-    </div>
-    <script>
-        let auto = false;
-        let timer = null;
-        function toggleAuto(){
-            auto = !auto;
-            const btn = document.getElementById('autoBtn');
-            if(auto){
-                btn.textContent='关闭自动刷新';
-                timer = setInterval(()=>window.location.reload(),5000);
-            } else {
-                btn.textContent='开启自动刷新';
-                if(timer) clearInterval(timer);
-            }
+</div>
+<script>
+    let auto = false;
+    let timer = null;
+    function toggleAuto(){
+        auto = !auto;
+        const btn = document.getElementById('autoBtn');
+        if(auto){
+            btn.textContent='关闭自动刷新';
+            fetchAndRender();
+            timer = setInterval(fetchAndRender,5000);
+        } else {
+            btn.textContent='开启自动刷新';
+            if(timer) clearInterval(timer);
         }
-    </script>
+    }
+    function attachRowClicks(scope=document){
+        scope.querySelectorAll('.tag-row').forEach(tr=>{
+            tr.addEventListener('click',()=>{
+                const devId = tr.getAttribute('data-device-id');
+                const tagName = tr.getAttribute('data-tag-name');
+                if(devId && tagName){
+                    window.location = '/data/history/' + encodeURIComponent(devId) + '/' + encodeURIComponent(tagName);
+                }
+            }, { once: true }); // once avoids duplicate listeners if re-attached
+        });
+    }
+    // Attach for server-rendered content
+    attachRowClicks();
+    function fetchAndRender(){
+        fetch('/data/api/latest').then(r=>r.json()).then(list=>{
+            const grid = document.querySelector('.grid');
+            if(!grid) return;
+            grid.innerHTML = '';
+            if(!list || list.length===0){
+                return;
+            }
+            list.forEach(dev=>{
+                const card = document.createElement('div');
+                card.className='card';
+                const rowsHtml = (dev.tags||[]).map(t=>`<tr class='tag-row' data-device-id='${dev.deviceId}' data-tag-name='${encodeURIComponent(t.name)}' style='cursor:pointer;border-bottom:1px solid rgba(0,191,255,0.2);'>\n<td style='padding:4px;'>${t.name}</td>\n<td style='padding:4px;'>${t.address||''}</td>\n<td style='padding:4px;font-family:monospace;'>${t.value||''}</td></tr>`).join('');
+                card.innerHTML = `
+<h3>${dev.deviceName} (ID:${dev.deviceId})</h3>
+<p style="margin:0.3rem 0;font-size:0.85rem;">协议: ${dev.protocol||''} | 最新时间: <strong>${dev.timestamp||''}</strong></p>
+<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+<thead><tr style='text-align:left;border-bottom:1px solid #00bfff;'><th style='padding:4px;'>Tag</th><th style='padding:4px;'>地址</th><th style='padding:4px;'>当前值</th></tr></thead>
+<tbody>
+${rowsHtml}
+${(!dev.tags || dev.tags.length===0)?"<tr><td colspan='3' style='padding:4px;color:#ffb347;'>未配置标签或尚无数据</td></tr>":''}
+</tbody></table>`;
+                grid.appendChild(card);
+                attachRowClicks(card);
+            });
+            const ts = new Date();
+            document.getElementById('lastRefresh').textContent = '最后刷新: ' + ts.toLocaleTimeString();
+        }).catch(err=>console.error('刷新失败',err));
+    }
+</script>
 </body>
 </html>

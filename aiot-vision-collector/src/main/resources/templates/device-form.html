@@ -12,8 +12,8 @@
             <input type="text" th:field="*{name}" placeholder="设备名称" required>
             <label>协议</label>
             <select th:field="*{protocol}">
-                <option value="modbus-tcp">Modbus TCP</option>
-                <option value="opcua">OPC UA</option>
+<!--                <option value="modbus-tcp">Modbus TCP</option>-->
+                <option value="opcua" selected="selected" >OPC UA</option>
             </select>
             <label>连接字符串</label>
             <input type="text" th:field="*{connectionString}" placeholder="例: modbus:tcp://127.0.0.1:502?unit-id=1" required>
