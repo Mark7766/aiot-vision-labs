@@ -16,4 +16,5 @@ public class Device {
     private String connectionString; // e.g., "modbus:tcp://ip:502?unit-id=1"
     @OneToMany(mappedBy = "device", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Tag> tags;
+
 }

@@ -76,7 +76,7 @@
 			<groupId>org.eclipse.milo</groupId>
 			<artifactId>sdk-client</artifactId>
 			<version>${milo.version}</version>
-			<scope>test</scope>
+<!--			<scope>test</scope>-->
 			<optional>true</optional>
 		</dependency>
 	</dependencies>

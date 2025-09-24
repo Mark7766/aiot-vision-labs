@@ -1,18 +1,34 @@
 package com.sandy.aiot.vision.collector.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sandy.aiot.vision.collector.vo.NamespaceVO;
 import com.sandy.aiot.vision.collector.entity.DataRecord;
 import com.sandy.aiot.vision.collector.entity.Device;
 import com.sandy.aiot.vision.collector.entity.Tag;
 import com.sandy.aiot.vision.collector.repository.DataRecordRepository;
 import com.sandy.aiot.vision.collector.repository.DeviceRepository;
 import com.sandy.aiot.vision.collector.repository.TagRepository;
+import com.sandy.aiot.vision.collector.vo.TagValueVO;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.plc4x.java.api.PlcConnection;
 import org.apache.plc4x.java.api.PlcDriverManager;
-import org.apache.plc4x.java.api.messages.PlcReadRequest;
-import org.apache.plc4x.java.api.messages.PlcReadResponse;
-import org.apache.plc4x.java.api.types.PlcResponseCode;
+import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
+import org.eclipse.milo.opcua.sdk.client.api.UaClient;
+import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
+import org.eclipse.milo.opcua.stack.core.Identifiers;
+import org.eclipse.milo.opcua.stack.core.NamespaceTable;
+import org.eclipse.milo.opcua.stack.core.UaException;
+import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
+import org.eclipse.milo.opcua.stack.core.types.builtin.ExpandedNodeId;
+import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
+import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
+import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
+import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UShort;
+import org.eclipse.milo.opcua.stack.core.types.enumerated.BrowseDirection;
+import org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass;
+import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn;
+import org.eclipse.milo.opcua.stack.core.types.structured.BrowseDescription;
+import org.eclipse.milo.opcua.stack.core.types.structured.BrowseResult;
+import org.eclipse.milo.opcua.stack.core.types.structured.ReferenceDescription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 @Service
 @Slf4j
@@ -51,6 +69,67 @@ public class CollectorService {
         doCollect();
     }
 
+    public List<NamespaceVO> getNameSpaces(Device device) throws ExecutionException, InterruptedException {
+        OpcUaClient client =null;
+        try {
+            client = OpcUaClient.create(device.getConnectionString());
+            client.connect().get();
+            // 读取 NamespaceArray (NodeId: i=2255)
+            NodeId namespaceArrayNode = Identifiers.Server_NamespaceArray;
+            DataValue value = client.readValue(0, TimestampsToReturn.Source,namespaceArrayNode).get();
+            Variant variant = value.getValue();
+            List<NamespaceVO> namespaceVOS= new ArrayList<>();
+            // 检查返回值是否为字符串数组
+            if (variant.getValue() instanceof String[] namespaces) {
+                log.info("Found {} namespaces:", namespaces.length);
+                for (int i = 0; i < namespaces.length; i++) {
+                    log.info("Namespace [{}] = {}", i, namespaces[i]);
+                    namespaceVOS.add(NamespaceVO.builder()
+                            .index(i)
+                            .uri(namespaces[i])
+                            .build());
+                }
+            } else {
+                log.error("NamespaceArray is not a String array");
+            }
+            return namespaceVOS;
+        } catch (UaException e) {
+            throw new RuntimeException(e);
+        } finally {
+            // 断开连接
+            client.disconnect().get();
+        }
+    }
+    public List<TagValueVO> getTagsByDeviceAndNamespaceVO(Device device, NamespaceVO namespaceVO) throws Exception {
+        OpcUaClient client = OpcUaClient.create(device.getConnectionString());
+        client.connect().get();
+        List<TagValueVO> tagValueVOS = new ArrayList<>();
+        try {
+            // 指定要查询的 Namespace Index（例如 1）
+            int targetNamespaceIndex = namespaceVO.getIndex();
+            // 从 ObjectsFolder 开始浏览
+            NodeId startNode = Identifiers.ObjectsFolder;
+            List<NodeId> nodeIds = browseNamespace(client, startNode, targetNamespaceIndex);
+            // 输出结果
+            log.info("Found {} nodes in Namespace {}:", nodeIds.size(), targetNamespaceIndex);
+            for (NodeId nodeId : nodeIds) {
+                UaNode node = client.getAddressSpace().getNode(nodeId);
+                CompletableFuture<DataValue> completableFuture = client.readValue(0, TimestampsToReturn.Source, nodeId);
+                DataValue dataValue = completableFuture.get();
+                log.info("NodeId: {} ,name: {},value:{}", nodeId,node.getDisplayName().getText(),dataValue.getValue().getValue());
+                tagValueVOS.add(TagValueVO.builder()
+                                .name(node.getDisplayName().getText())
+                                .address(nodeId.toParseableString())
+                                .value(dataValue.getValue().getValue())
+                        .build());
+            }
+            return tagValueVOS;
+        } finally {
+            // 断开连接
+            client.disconnect().get();
+        }
+    }
+
     private void doCollect() {
         List<Device> devices = deviceRepository.findAll();
         if (devices.isEmpty()) {
@@ -74,20 +153,23 @@ public class CollectorService {
             String conn = device.getConnectionString();
             boolean isOpcUa = conn != null && conn.startsWith("opcua:tcp://");
             Map<String,Object> values = null;
-            try (PlcConnection connection = driverManager.getConnectionManager().getConnection(conn)) {
-                PlcReadRequest.Builder requestBuilder = connection.readRequestBuilder();
+            try  {
+                OpcUaClient client = OpcUaClient.create(conn);
+                UaClient uaClient = client.connect().get();
+                List<NodeId> nodeIds=new ArrayList<>();
                 for (Tag tag : tags) {
-                    requestBuilder.addTagAddress(tag.getName(), tag.getAddress());
+                    nodeIds.add(NodeId.parse(tag.getAddress()));
                 }
-                PlcReadRequest request = requestBuilder.build();
-                PlcReadResponse response = request.execute().get();
+                CompletableFuture<List<DataValue>> completableFuture = uaClient.readValues(0, TimestampsToReturn.Source, nodeIds);
+                List<DataValue> dataValues = completableFuture.get();
                 values = new LinkedHashMap<>();
-                for (String tagName : response.getTagNames()) {
-                    PlcResponseCode code = response.getResponseCode(tagName);
-                    log.info("Tag: {}, Response Code: {}, Value: {}", tagName, code, response.getObject(tagName));
-                    values.put(tagName, code == PlcResponseCode.OK ? response.getObject(tagName) : ("ERROR:" + code));
+                for (int i = 0; i < nodeIds.size(); i++) {
+                    NodeId nodeId = nodeIds.get(i);
+                    DataValue dataValue = dataValues.get(i);
+                    Tag tag = tags.get(i);
+                    log.info("TagName:{},NodeId: {},value:{}", tag.getName(),nodeId,dataValue.getValue().getValue());
+                    values.put(tag.getName(),dataValue.getValue().getValue());
                 }
-                values.put("mode", isOpcUa ? "opcua-plc4x" : "plc4x");
             } catch (Exception ex) {
                 logger.error("采集失败 device={} error={}", device.getName(), ex.getMessage());
                 persistDeviceSnapshot(device.getId(), device.getName(), Map.of(
@@ -136,6 +218,53 @@ public class CollectorService {
         } catch (Exception e) {
             logger.error("创建信息记录失败: {}", e.getMessage());
         }
+    }
+    /**
+     * 递归浏览指定 Namespace 的节点
+     */
+    private static List<NodeId> browseNamespace(OpcUaClient client, NodeId nodeId, int targetNamespaceIndex) throws Exception {
+        List<NodeId> nodesInNamespace = new ArrayList<>();
+
+        // 配置 Browse 请求
+        BrowseDescription browse = new BrowseDescription(
+                nodeId,
+                BrowseDirection.Forward,
+                Identifiers.References, // 所有引用类型
+                true,
+                UInteger.valueOf(NodeClass.Object.getValue() | NodeClass.Variable.getValue() | NodeClass.Method.getValue()),
+                UInteger.valueOf(0xFF) // 所有引用
+        );
+
+        // 执行 Browse
+        BrowseResult result = client.browse(browse).get();
+        ReferenceDescription[] references = result.getReferences();
+        NamespaceTable ns = null;
+        if (references != null) {
+            for (ReferenceDescription ref : references) {
+                ExpandedNodeId refNodeId = ref.getNodeId();
+                if(ns==null){
+                    ns = new NamespaceTable();
+                    ns.putUri(refNodeId.getNamespaceUri(),refNodeId.getNamespaceIndex());
+                }
+                NodeId snodeId = refNodeId.toNodeId(ns).orElse(null);
+                if (snodeId != null) {
+                    // 检查 Namespace Index
+                    if (refNodeId.getNamespaceIndex().compareTo(UShort.valueOf(targetNamespaceIndex))==0) {
+                        nodesInNamespace.add(snodeId);
+                    }
+                    // 递归浏览子节点
+                    nodesInNamespace.addAll(browseNamespace(client, snodeId, targetNamespaceIndex));
+                }
+            }
+        }
+
+        // 处理 ContinuationPoint（如果节点过多）
+        if (result.getContinuationPoint() != null) {
+            // 实现 ContinuationPoint 处理（略，需循环调用 browseNext）
+            log.trace("ContinuationPoint detected, implement browseNext for complete results");
+        }
+
+        return nodesInNamespace;
     }
 }
 

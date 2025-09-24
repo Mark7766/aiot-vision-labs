@@ -3,6 +3,7 @@ package com.sandy.aiot.vision.collector;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
 import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
+import org.eclipse.milo.opcua.sdk.client.nodes.UaObjectNode;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
 import org.eclipse.milo.opcua.stack.core.NamespaceTable;
 import org.eclipse.milo.opcua.stack.core.UaException;
@@ -22,6 +23,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * OPC UA 连接可用性测试 (默认跳过)。
@@ -50,12 +53,23 @@ public class OpcUaConnectionTestByMilo {
             int targetNamespaceIndex = 3;
             // 从 ObjectsFolder 开始浏览
             NodeId startNode = Identifiers.ObjectsFolder;
-            List<NodeId> nodesInNamespace = browseNamespace(client, startNode, targetNamespaceIndex);
+            List<NodeId> nodeIds = browseNamespace(client, startNode, targetNamespaceIndex);
             // 输出结果
-            log.info("Found {} nodes in Namespace {}:", nodesInNamespace.size(), targetNamespaceIndex);
-            for (NodeId nodeId : nodesInNamespace) {
-                log.info("NodeId: {}, BrowseName: {}", nodeId, nodeId.);
+            log.info("Found {} nodes in Namespace {}:", nodeIds.size(), targetNamespaceIndex);
+            for (NodeId nodeId : nodeIds) {
+                UaNode node = client.getAddressSpace().getNode(nodeId);
+                CompletableFuture<DataValue> completableFuture = client.readValue(0, TimestampsToReturn.Source, nodeId);
+                DataValue dataValue = completableFuture.get();
+                log.info("NodeId: {} ,name: {},value:{}", nodeId,node.getDisplayName().getText(),dataValue.getValue().getValue());
             }
+            CompletableFuture<List<DataValue>> completableFuture = client.readValues(0, TimestampsToReturn.Source, nodeIds);
+            List<DataValue> dataValues = completableFuture.get();
+            for (int i = 0; i < nodeIds.size(); i++) {
+                NodeId nodeId = nodeIds.get(i);
+                DataValue dataValue = dataValues.get(i);
+                log.info("NodeId: {},value:{}", nodeId,dataValue.getValue().getValue());
+            }
+
         } finally {
             // 断开连接
             client.disconnect().get();
@@ -64,8 +78,7 @@ public class OpcUaConnectionTestByMilo {
     @Test
     void testDiscoveryNameSpace() throws Exception {
         String endpointUrl = "opc.tcp://127.0.0.1:53530/OPCUA/SimulationServer"; // 修改为您的 OPC UA 服务器地址
-        OpcUaClient client = OpcUaClient.create(endpointUrl);
-        client.connect().get();
+        OpcUaClient client = OpcUaClient.create(endpointUrl);client.connect().get();
         try {
             // 读取 NamespaceArray (NodeId: i=2255)
             NodeId namespaceArrayNode = Identifiers.Server_NamespaceArray;
@@ -144,19 +157,12 @@ public class OpcUaConnectionTestByMilo {
         // 处理 ContinuationPoint（如果节点过多）
         if (result.getContinuationPoint() != null) {
             // 实现 ContinuationPoint 处理（略，需循环调用 browseNext）
-            log.info("ContinuationPoint detected, implement browseNext for complete results");
+            log.trace("ContinuationPoint detected, implement browseNext for complete results");
         }
 
         return nodesInNamespace;
     }
 
-    /**
-     * 获取节点的 BrowseName
-     */
-    private static String getBrowseName(OpcUaClient client, NodeId nodeId) throws Exception {
-        DataValue value = client.readValue(0, TimestampsToReturn.Source, nodeId).get();
-        return value.getValue().getValue().toString();
-    }
 }
 
 

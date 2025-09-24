@@ -1,11 +1,14 @@
 package com.sandy.aiot.vision.collector.entity;
 
 import jakarta.persistence.*;
+import lombok.Builder;
 import lombok.Data;
+import lombok.ToString;
 
 @Entity
 @Table(name = "tags")
 @Data
+@Builder
 public class Tag {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
