@@ -49,7 +49,7 @@ public class DeviceController {
 
     @GetMapping("/{deviceId}/tags/add")
     public String addTagForm(@PathVariable Long deviceId, Model model) {
-        Tag tag = new Tag();
+        Tag tag = Tag.builder().build();
         tag.setDevice(dataService.getDeviceById(deviceId));
         model.addAttribute("tag", tag);
         model.addAttribute("deviceId", deviceId);

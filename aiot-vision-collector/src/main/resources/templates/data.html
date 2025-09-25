@@ -11,6 +11,34 @@
         <span id="lastRefresh" style="align-self:center;font-size:0.9rem;color:#ccc;"></span>
     </div>
 </div>
+
+<!-- 新增样式：Namespace 浏览弹层优化 -->
+<style>
+/***** Namespace Modal UI *****/
+#namespaceModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:999;align-items:center;justify-content:center;}
+.ns-wrapper{width:90%;max-width:1000px;background:#0b1e2b;border:1px solid #00bfff;border-radius:8px;box-shadow:0 0 12px #00bfff88;padding:1rem 1.2rem 1.1rem;max-height:90%;display:flex;flex-direction:column;gap:.75rem;}
+.ns-header{display:flex;justify-content:space-between;align-items:center;}
+.ns-columns{display:flex;gap:1rem;align-items:stretch;}
+.ns-left{flex:0 0 280px;display:flex;flex-direction:column;max-height:60vh;}
+#nsList{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1;border:1px solid #0f3c52;border-radius:4px;background:#082031;}
+#nsList::-webkit-scrollbar{width:8px;}#nsList::-webkit-scrollbar-thumb{background:#0f4d6d;border-radius:4px;}
+.ns-item{padding:6px 8px;font-size:.8rem;line-height:1.2;border-bottom:1px solid #0f3c52;cursor:pointer;display:flex;gap:.5rem;justify-content:space-between;align-items:center;transition:background .15s;}
+.ns-item:last-child{border-bottom:none;}
+.ns-item:hover{background:#0f3350;}
+.ns-item.active{background:linear-gradient(90deg,#004d66,#00638a);}
+.ns-right{flex:1;display:flex;flex-direction:column;max-height:60vh;min-width:360px;}
+.ns-tags-head{display:flex;justify-content:space-between;align-items:center;font-size:.8rem;margin-bottom:.4rem;color:#7fdcff;}
+.ns-tags-container{flex:1;overflow:auto;border:1px solid #0f3c52;border-radius:4px;background:#082031;}
+.ns-tags-container table{width:100%;border-collapse:collapse;font-size:.75rem;}
+.ns-tags-container thead th{position:sticky;top:0;background:#042335;border-bottom:1px solid #00bfff;padding:6px 6px;font-weight:600;}
+.ns-tags-container tbody td{padding:4px 6px;border-bottom:1px solid rgba(0,191,255,0.08);font-family:monospace;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ns-empty{padding:8px;font-size:.75rem;color:#999;}
+.ns-status{font-size:.7rem;color:#7fdcff;display:flex;gap:.75rem;align-items:center;}
+.close-btn{background:#123;color:#eee;border:1px solid #00bfff;cursor:pointer;padding:.35rem .8rem;font-size:.75rem;border-radius:4px;}
+.close-btn:hover{background:#004055;}
+@media (max-width:820px){.ns-columns{flex-direction:column;}.ns-left{flex:0 0 auto;max-height:200px;}.ns-right{max-height:300px;}}
+</style>
+
 <div th:if="${#lists.isEmpty(devices)}" class="card">
     <h3>暂无设备数据</h3>
     <p>请前往 设备配置 页面添加设备与标签，或等待定时采集。</p>
@@ -23,6 +51,9 @@
             | 连接: <span th:text="${dev.connectionString}"></span>
             | 最新时间: <strong th:text="${dev.timestamp}"></strong>
         </p>
+        <div style="margin:0.3rem 0;display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button type="button" th:attr="data-device-id=${dev.deviceId}" class="ns-btn" onclick="openNamespaces(this.getAttribute('data-device-id'))">查看Namespaces</button>
+        </div>
         <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
             <thead>
             <tr style="text-align:left;border-bottom:1px solid #00bfff;">
@@ -43,6 +74,37 @@
             </tr>
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Namespace & Tag 浏览弹层 (改进版) -->
+<div id="namespaceModal">
+    <div class="ns-wrapper">
+        <div class="ns-header">
+            <h2 style="margin:0;font-size:1.05rem;">Namespaces 浏览</h2>
+            <div style="display:flex;gap:.6rem;align-items:center;">
+                <span id="nsSelectedLabel" style="font-size:.7rem;color:#7fdcff;"></span>
+                <button onclick="closeNsModal()" class="close-btn">关闭</button>
+            </div>
+        </div>
+        <div class="ns-columns">
+            <div class="ns-left">
+                <h3 style="margin:0 0 .4rem 0;font-size:.8rem;letter-spacing:.5px;color:#7fdcff;">Namespaces</h3>
+                <ul id="nsList"></ul>
+            </div>
+            <div class="ns-right">
+                <div class="ns-tags-head">
+                    <div style="font-weight:600;">Namespace 下 Tags</div>
+                    <div class="ns-status" id="nsStatus"></div>
+                </div>
+                <div class="ns-tags-container">
+                    <table>
+                        <thead><tr><th style="width:30%;">名称</th><th style="width:40%;">地址</th><th style="width:30%;">值</th></tr></thead>
+                        <tbody id="nsTagBody"><tr><td colspan="3" class="ns-empty">请选择左侧 Namespace</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 <script>
@@ -68,11 +130,66 @@
                 if(devId && tagName){
                     window.location = '/data/history/' + encodeURIComponent(devId) + '/' + encodeURIComponent(tagName);
                 }
-            }, { once: true }); // once avoids duplicate listeners if re-attached
+            }, { once: true });
         });
     }
-    // Attach for server-rendered content
     attachRowClicks();
+
+    // ===== Namespace 浏览逻辑 =====
+    let currentNsDeviceId = null;
+    function openNamespaces(deviceId){
+        currentNsDeviceId = deviceId;
+        const modal = document.getElementById('namespaceModal');
+        modal.style.display='flex';
+        const ul = document.getElementById('nsList');
+        ul.innerHTML = '<li class="ns-item" style="cursor:default;opacity:.7;">加载中...</li>';
+        document.getElementById('nsTagBody').innerHTML = '<tr><td colspan="3" class="ns-empty">请选择左侧 Namespace</td></tr>';
+        document.getElementById('nsStatus').textContent = '';
+        document.getElementById('nsSelectedLabel').textContent = '';
+        fetch(`/data/api/${deviceId}/namespaces`).then(r=>r.json()).then(list=>{
+            ul.innerHTML = '';
+            if(!list || list.length===0){
+                ul.innerHTML = '<li class="ns-item" style="cursor:default;color:#ffb347;">无数据或读取失败</li>';
+                return;
+            }
+            list.forEach(ns=>{
+                const li = document.createElement('li');
+                li.className='ns-item';
+                li.innerHTML = `<span style="flex:1;">#${ns.index} ${ns.uri||''}</span><span style='font-size:0.65rem;color:#7fdcff;'>查看</span>`;
+                li.addEventListener('click',()=>loadNamespaceTags(deviceId, ns.index, li, ns.uri));
+                ul.appendChild(li);
+            });
+        }).catch(err=>{
+            ul.innerHTML = '<li class="ns-item" style="cursor:default;color:#ff4d4f;">加载失败 '+err+'</li>';
+        });
+    }
+    function closeNsModal(){
+        document.getElementById('namespaceModal').style.display='none';
+    }
+    // 支持 ESC 关闭
+    document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeNsModal(); }});
+
+    function loadNamespaceTags(deviceId, nsIndex, li, uri){
+        // 高亮
+        document.querySelectorAll('#nsList .ns-item').forEach(x=>x.classList.remove('active'));
+        li.classList.add('active');
+        document.getElementById('nsSelectedLabel').textContent = `已选: #${nsIndex}${uri?(' '+uri):''}`;
+        const body = document.getElementById('nsTagBody');
+        body.innerHTML = `<tr><td colspan='3' class='ns-empty'>加载中...</td></tr>`;
+        fetch(`/data/api/${deviceId}/namespaces/${nsIndex}/tags`).then(r=>r.json()).then(tags=>{
+            if(!tags || tags.length===0){
+                body.innerHTML = `<tr><td colspan='3' class='ns-empty'>无数据</td></tr>`;
+                document.getElementById('nsStatus').textContent = '';
+                return;
+            }
+            body.innerHTML = tags.map(t=>`<tr><td>${t.name||''}</td><td>${t.address||''}</td><td>${(t.value===null||t.value===undefined)?'':t.value}</td></tr>`).join('');
+            document.getElementById('nsStatus').textContent = `已加载 ${tags.length} 条`;
+        }).catch(err=>{
+            body.innerHTML = `<tr><td colspan='3' class='ns-empty' style='color:#ff4d4f;'>加载失败 ${err}</td></tr>`;
+            document.getElementById('nsStatus').textContent = '';
+        });
+    }
+
     function fetchAndRender(){
         fetch('/data/api/latest').then(r=>r.json()).then(list=>{
             const grid = document.querySelector('.grid');
@@ -88,6 +205,7 @@
                 card.innerHTML = `
 <h3>${dev.deviceName} (ID:${dev.deviceId})</h3>
 <p style="margin:0.3rem 0;font-size:0.85rem;">协议: ${dev.protocol||''} | 最新时间: <strong>${dev.timestamp||''}</strong></p>
+<div style='margin:0.3rem 0;display:flex;gap:0.5rem;flex-wrap:wrap;'><button type='button' class='ns-btn' onclick='openNamespaces(${dev.deviceId})'>查看Namespaces</button></div>
 <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
 <thead><tr style='text-align:left;border-bottom:1px solid #00bfff;'><th style='padding:4px;'>Tag</th><th style='padding:4px;'>地址</th><th style='padding:4px;'>当前值</th></tr></thead>
 <tbody>

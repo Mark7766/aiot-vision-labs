@@ -12,7 +12,8 @@ public class DataRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private Long tagId;
-    @Column(name = "\"value\"")
-    private String value; // JSON-like string for simplicity
+    @Lob
+    @Column(name = "\"value\"", columnDefinition = "CLOB")
+    private String value; // JSON-like string for simplicity, now CLOB for larger payloads
     private LocalDateTime timestamp;
 }

@@ -36,10 +36,13 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.annotation.PreDestroy;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -57,28 +60,78 @@ public class CollectorService {
     // 避免在没有设备时每次都插入占位记录
     private volatile boolean emittedNoDeviceRecord = false;
 
+    // Cache for reusing OPC UA sessions to avoid TooManySessions burst
+    private final Map<Long, OpcUaClient> opcUaClients = new ConcurrentHashMap<>();
+    // Backoff map: deviceId -> epochMilli until which collection is skipped
+    private final Map<Long, Long> deviceBackoffUntil = new ConcurrentHashMap<>();
+
+    private static final long TOO_MANY_SESSIONS_BACKOFF_MS = TimeUnit.SECONDS.toMillis(30);
+
+    @PreDestroy
+    public void shutdown() {
+        opcUaClients.forEach((id, c) -> {
+            try { c.disconnect().get(3, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception ignore) {}
+        });
+        opcUaClients.clear();
+    }
+
+    private OpcUaClient getOrCreateClient(Device device) throws Exception {
+        return opcUaClients.compute(device.getId(), (id, existing) -> {
+            try {
+                if (existing != null) {
+                    // Attempt a lightweight ping by reading namespace array maybe? Skip for now
+                    return existing; // assume still valid; Milo reconnects on demand
+                }
+                OpcUaClient c = OpcUaClient.create(device.getConnectionString());
+                c.connect().get();
+                return c;
+            } catch (Exception e) {
+                if (existing != null) {
+                    try { existing.disconnect().get(); } catch (Exception ignore) {}
+                }
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    private void invalidateClient(Long deviceId) {
+        OpcUaClient c = opcUaClients.remove(deviceId);
+        if (c != null) {
+            try { c.disconnect().get(); } catch (Exception ignore) {}
+        }
+    }
+
+    private boolean isInBackoff(Device device) {
+        Long until = deviceBackoffUntil.get(device.getId());
+        return until != null && System.currentTimeMillis() < until;
+    }
+
+    private void applyBackoff(Device device) {
+        long until = System.currentTimeMillis() + TOO_MANY_SESSIONS_BACKOFF_MS;
+        deviceBackoffUntil.put(device.getId(), until);
+        log.warn("设备 {} 进入会话限流回退，暂停采集 {} ms", device.getName(), TOO_MANY_SESSIONS_BACKOFF_MS);
+    }
+
     @Scheduled(fixedRate = 5000)
-    @Transactional
-    public void collectData() {
+    public void collectData() { // removed @Transactional to prevent batch rollback
         doCollect();
     }
 
     // 手动触发调用
-    @Transactional
-    public void collectDataOnce() {
+    public void collectDataOnce() { // removed @Transactional
         doCollect();
     }
 
     public List<NamespaceVO> getNameSpaces(Device device) throws ExecutionException, InterruptedException {
-        OpcUaClient client =null;
+        OpcUaClient client = null;
         try {
             client = OpcUaClient.create(device.getConnectionString());
             client.connect().get();
             // 读取 NamespaceArray (NodeId: i=2255)
             NodeId namespaceArrayNode = Identifiers.Server_NamespaceArray;
-            DataValue value = client.readValue(0, TimestampsToReturn.Source,namespaceArrayNode).get();
+            DataValue value = client.readValue(0, TimestampsToReturn.Source, namespaceArrayNode).get();
             Variant variant = value.getValue();
-            List<NamespaceVO> namespaceVOS= new ArrayList<>();
+            List<NamespaceVO> namespaceVOS = new ArrayList<>();
             // 检查返回值是否为字符串数组
             if (variant.getValue() instanceof String[] namespaces) {
                 log.info("Found {} namespaces:", namespaces.length);
@@ -97,10 +150,12 @@ public class CollectorService {
             throw new RuntimeException(e);
         } finally {
             // 断开连接
-            client.disconnect().get();
+            if (client != null)
+                client.disconnect().get();
         }
     }
-    public List<TagValueVO> getTagsByDeviceAndNamespaceVO(Device device, NamespaceVO namespaceVO) throws Exception {
+
+    public List<TagValueVO> getTagsByDeviceAndNamespace(Device device, NamespaceVO namespaceVO) throws Exception {
         OpcUaClient client = OpcUaClient.create(device.getConnectionString());
         client.connect().get();
         List<TagValueVO> tagValueVOS = new ArrayList<>();
@@ -116,11 +171,11 @@ public class CollectorService {
                 UaNode node = client.getAddressSpace().getNode(nodeId);
                 CompletableFuture<DataValue> completableFuture = client.readValue(0, TimestampsToReturn.Source, nodeId);
                 DataValue dataValue = completableFuture.get();
-                log.info("NodeId: {} ,name: {},value:{}", nodeId,node.getDisplayName().getText(),dataValue.getValue().getValue());
+                log.info("NodeId: {} ,name: {},value:{}", nodeId, node.getDisplayName().getText(), dataValue.getValue().getValue());
                 tagValueVOS.add(TagValueVO.builder()
-                                .name(node.getDisplayName().getText())
-                                .address(nodeId.toParseableString())
-                                .value(dataValue.getValue().getValue())
+                        .name(node.getDisplayName().getText())
+                        .address(nodeId.toParseableString())
+                        .value(dataValue.getValue().getValue())
                         .build());
             }
             return tagValueVOS;
@@ -131,7 +186,7 @@ public class CollectorService {
     }
 
     private void doCollect() {
-        List<Device> devices = deviceRepository.findAll();
+        List<Device> devices = deviceRepository.findAllWithTags();
         if (devices.isEmpty()) {
             if (!emittedNoDeviceRecord && dataRecordRepository.count() == 0) {
                 createInfoRecord("no-devices", Map.of(
@@ -143,6 +198,10 @@ public class CollectorService {
             return;
         }
         for (Device device : devices) {
+            if (isInBackoff(device)) {
+                log.debug("跳过设备 {} 采集（会话回退中）", device.getName());
+                continue;
+            }
             List<Tag> tags = device.getTags();
             if (tags == null || tags.isEmpty()) {
                 persistDeviceSnapshot(device.getId(), device.getName(), Map.of(
@@ -152,13 +211,26 @@ public class CollectorService {
             }
             String conn = device.getConnectionString();
             boolean isOpcUa = conn != null && conn.startsWith("opcua:tcp://");
-            Map<String,Object> values = null;
-            try  {
-                OpcUaClient client = OpcUaClient.create(conn);
-                UaClient uaClient = client.connect().get();
-                List<NodeId> nodeIds=new ArrayList<>();
+            Map<String, Object> values = null;
+            OpcUaClient client = null;
+            try {
+                client = getOrCreateClient(device);
+                UaClient uaClient = client; // OpcUaClient implements UaClient interface
+                List<NodeId> nodeIds = new ArrayList<>();
+                List<Tag> validTags = new ArrayList<>();
                 for (Tag tag : tags) {
-                    nodeIds.add(NodeId.parse(tag.getAddress()));
+                    try {
+                        nodeIds.add(NodeId.parse(tag.getAddress()));
+                        validTags.add(tag);
+                    } catch (Exception parseEx) {
+                        log.warn("解析地址失败 device={} tag={} addr={} err={}", device.getName(), tag.getName(), tag.getAddress(), parseEx.getMessage());
+                    }
+                }
+                if (nodeIds.isEmpty()) {
+                    persistDeviceSnapshot(device.getId(), device.getName(), Map.of(
+                            "warning", "无有效点位地址"
+                    ));
+                    continue;
                 }
                 CompletableFuture<List<DataValue>> completableFuture = uaClient.readValues(0, TimestampsToReturn.Source, nodeIds);
                 List<DataValue> dataValues = completableFuture.get();
@@ -166,19 +238,30 @@ public class CollectorService {
                 for (int i = 0; i < nodeIds.size(); i++) {
                     NodeId nodeId = nodeIds.get(i);
                     DataValue dataValue = dataValues.get(i);
-                    Tag tag = tags.get(i);
-                    log.info("TagName:{},NodeId: {},value:{}", tag.getName(),nodeId,dataValue.getValue().getValue());
-                    values.put(tag.getName(),dataValue.getValue().getValue());
+                    Tag tag = validTags.get(i);
+                    Object v = (dataValue == null || dataValue.getValue() == null) ? null : dataValue.getValue().getValue();
+                    log.info("TagName:{},NodeId: {},value:{}", tag.getName(), nodeId, v);
+                    values.put(tag.getName(), v);
                 }
             } catch (Exception ex) {
-                logger.error("采集失败 device={} error={}", device.getName(), ex.getMessage());
+                String rawMsg = ex.getMessage();
+                String msg = rawMsg;
+                if (msg != null && msg.length() > 160) {
+                    msg = msg.substring(0, 160) + "..."; // 避免过长
+                }
+                logger.error("采集失败 device={} error={}:{}", device.getName(), ex.getClass().getSimpleName(), msg);
+                if (rawMsg != null && rawMsg.contains("Bad_TooManySessions")) {
+                    applyBackoff(device);
+                } else {
+                    // Other errors -> invalidate to force reconnect next round
+                    invalidateClient(device.getId());
+                }
                 persistDeviceSnapshot(device.getId(), device.getName(), Map.of(
-                        "error", ex.getClass().getSimpleName() + ":" + ex.getMessage(),
-                        "tip", "检查连接字符串或设备网络",
+                        "error", ex.getClass().getSimpleName() + ":" + msg,
+                        "tip", rawMsg != null && rawMsg.contains("Bad_TooManySessions") ? "服务器会话已满，等待回退结束后自动重试" : "检查连接字符串或设备网络",
                         "mode", isOpcUa ? "opcua-plc4x-fail" : "plc4x-fail",
                         "time", LocalDateTime.now().toString()
                 ));
-                continue;
             }
             if (values != null) {
                 persistDeviceSnapshot(device.getId(), device.getName(), values);
@@ -219,6 +302,7 @@ public class CollectorService {
             logger.error("创建信息记录失败: {}", e.getMessage());
         }
     }
+
     /**
      * 递归浏览指定 Namespace 的节点
      */
@@ -242,14 +326,14 @@ public class CollectorService {
         if (references != null) {
             for (ReferenceDescription ref : references) {
                 ExpandedNodeId refNodeId = ref.getNodeId();
-                if(ns==null){
+                if (ns == null) {
                     ns = new NamespaceTable();
-                    ns.putUri(refNodeId.getNamespaceUri(),refNodeId.getNamespaceIndex());
+                    ns.putUri(refNodeId.getNamespaceUri(), refNodeId.getNamespaceIndex());
                 }
                 NodeId snodeId = refNodeId.toNodeId(ns).orElse(null);
                 if (snodeId != null) {
                     // 检查 Namespace Index
-                    if (refNodeId.getNamespaceIndex().compareTo(UShort.valueOf(targetNamespaceIndex))==0) {
+                    if (refNodeId.getNamespaceIndex().compareTo(UShort.valueOf(targetNamespaceIndex)) == 0) {
                         nodesInNamespace.add(snodeId);
                     }
                     // 递归浏览子节点
@@ -267,4 +351,3 @@ public class CollectorService {
         return nodesInNamespace;
     }
 }
-

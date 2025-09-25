@@ -32,7 +32,7 @@ public class DevicePersistenceIntegrationTest {
         d.setConnectionString("modbus:tcp://127.0.0.1:502?unit-id=1");
         d = deviceRepo1.save(d);
 
-        Tag t = new Tag();
+        Tag t = Tag.builder().build();
         t.setName("TEST-TAG-PERSIST");
         t.setAddress("holding-register:40001");
         t.setDevice(d);

@@ -16,6 +16,7 @@
 		<java.version>17</java.version>
 		<plc4x.version>0.13.1</plc4x.version>
 		<milo.version>0.6.13</milo.version>
+		<djl.version>0.34.0</djl.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -38,8 +39,7 @@
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<optional>true</optional>
-			<scope>provided</scope>
+			<version>1.18.40</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -78,6 +78,26 @@
 			<version>${milo.version}</version>
 <!--			<scope>test</scope>-->
 			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>ai.djl.timeseries</groupId>
+			<artifactId>timeseries</artifactId>
+			<version>${djl.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>ai.djl</groupId>
+			<artifactId>api</artifactId>
+			<version>${djl.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>ai.djl.mxnet</groupId>
+			<artifactId>mxnet-engine</artifactId>
+			<version>${djl.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>ai.djl.mxnet</groupId>
+			<artifactId>mxnet-model-zoo</artifactId>
+			<version>${djl.version}</version>
 		</dependency>
 	</dependencies>
 

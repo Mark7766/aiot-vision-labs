@@ -9,6 +9,10 @@ import com.sandy.aiot.vision.collector.repository.DataRecordRepository;
 import com.sandy.aiot.vision.collector.repository.DeviceRepository;
 import com.sandy.aiot.vision.collector.repository.TagRepository;
 import com.sandy.aiot.vision.collector.service.CollectorService;
+import com.sandy.aiot.vision.collector.service.PredictService;
+import com.sandy.aiot.vision.collector.vo.NamespaceVO;
+import com.sandy.aiot.vision.collector.vo.TagValueVO;
+import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelRsp;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +39,8 @@ public class DataController {
     private TagRepository tagRepository;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private PredictService predictService;
 
     private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -166,6 +172,51 @@ public class DataController {
         }
         Collections.reverse(list); // 升序
         return list;
+    }
+
+    // 新增：预测接口，返回历史与预测结果
+    @GetMapping(value = "/api/predict/{deviceId}/{tagName}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public TimeSeriesDataModelRsp apiPredict(@PathVariable Long deviceId, @PathVariable String tagName) {
+        try {
+            return predictService.predict(deviceId, tagName).toTimeSeriesDataModelRsp();
+        } catch (Exception e) {
+            log.error("预测失败 deviceId={} tagName={} err={}", deviceId, tagName, e.getMessage());
+            return TimeSeriesDataModelRsp.builder()
+                    .timestamps(Collections.emptyList())
+                    .values(Collections.emptyList())
+                    .predictions(Collections.emptyList())
+                    .build();
+        }
+    }
+
+    // 新增：获取设备的 Namespaces 列表
+    @GetMapping(value = "/api/{deviceId}/namespaces", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public List<NamespaceVO> apiNamespaces(@PathVariable Long deviceId){
+        Optional<Device> opt = deviceRepository.findById(deviceId);
+        if(opt.isEmpty()) return Collections.emptyList();
+        try {
+            return collectorService.getNameSpaces(opt.get());
+        } catch (Exception e){
+            log.error("获取设备 namespaces 失败 deviceId={} err={}", deviceId, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    // 新增：获取指定 namespace 下的 tags 列表
+    @GetMapping(value = "/api/{deviceId}/namespaces/{nsIndex}/tags", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public List<TagValueVO> apiNamespaceTags(@PathVariable Long deviceId, @PathVariable int nsIndex){
+        Optional<Device> opt = deviceRepository.findById(deviceId);
+        if(opt.isEmpty()) return Collections.emptyList();
+        try {
+            NamespaceVO ns = NamespaceVO.builder().index(nsIndex).uri(null).build();
+            return collectorService.getTagsByDeviceAndNamespace(opt.get(), ns);
+        } catch (Exception e){
+            log.error("获取 namespace tags 失败 deviceId={} nsIndex={} err={}", deviceId, nsIndex, e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     // 解析 DataRecord.value JSON
