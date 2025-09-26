@@ -112,7 +112,7 @@ public class CollectorService {
         log.warn("设备 {} 进入会话限流回退，暂停采集 {} ms", device.getName(), TOO_MANY_SESSIONS_BACKOFF_MS);
     }
 
-    @Scheduled(fixedRate = 5000)
+    @Scheduled(fixedRate = 1000)
     public void collectData() { // removed @Transactional to prevent batch rollback
         doCollect();
     }

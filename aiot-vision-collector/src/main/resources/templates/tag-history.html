@@ -389,7 +389,7 @@ document.addEventListener('visibilitychange', ()=>{
 
 // 初始化：默认显示折线图（如果可绘制），然后启动定时刷新
 setTimeout(()=>{ showLine(); updatePanels(); }, 0);
-refreshTimer = setInterval(fetchLatest, 5000);
+refreshTimer = setInterval(fetchLatest, 1000);
 </script>
 </body>
 </html>

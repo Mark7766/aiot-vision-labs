@@ -24,7 +24,7 @@ import java.util.*;
 
 @Service
 @Slf4j
-public class PredictService {
+public class PredictServiceBak {
     @Autowired
     private ZooModel<TimeSeriesData, Forecast> zooModel;
     @Autowired
@@ -41,7 +41,7 @@ public class PredictService {
                 throw new RuntimeException("Device[deviceId=" + deviceId + "] not found");
             }
             // 拉取更多历史，保证满足模型的季节滞后和上下文长度需求
-            List<DataRecord> dataRecords = dataRecordRepository.findTop10000ByTagIdOrderByTimestampDesc(deviceId);
+            List<DataRecord> dataRecords = dataRecordRepository.findTop1000ByTagIdOrderByTimestampDesc(deviceId);
             List<Float> recentValues = new ArrayList<>();
             List<LocalDateTime> recentTimestamps = new ArrayList<>();
             for (DataRecord dataRecord : dataRecords) {
@@ -66,16 +66,10 @@ public class PredictService {
             }
             NDArray targetArray = manager.create(valueArray);
             log.info("Target Array Shape: {} length={},[]={}", targetArray.getShape(), recentValues.size(), targetArray.getShape().getShape());
-
-            long[][] staticCats = {{0, 0, 0, 0, 0}};  // 形状 [1, 5]，批次=1
-            NDArray staticCatArray = manager.create(staticCats);
             TimeSeriesData input = new TimeSeriesData(recentValues.size());
             input.setField(FieldName.TARGET, targetArray);
-            input.setField(FieldName.FEAT_STATIC_CAT,staticCatArray);
             input.setStartTime(recentTimestamps.get(0)); // 起始时间为最早时间
-
             try (Predictor<TimeSeriesData, Forecast> predictor = zooModel.newPredictor()) {
-                log.info("Input T_history: {}", input.get(FieldName.TARGET).getShape().get(0));
                 Forecast forecast = predictor.predict(input);
                 List<Float> predictions = new ArrayList<>();
                 try (NDArray mean = forecast.mean()) {

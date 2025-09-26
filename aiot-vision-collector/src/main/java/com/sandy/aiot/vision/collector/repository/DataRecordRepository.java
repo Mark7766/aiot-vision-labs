@@ -20,5 +20,11 @@ public interface DataRecordRepository extends JpaRepository<DataRecord, Long> {
 
     // 获取指定设备最近 N 条（不提供 limit 参数由方法名定义）
     List<DataRecord> findTop1000ByTagIdOrderByTimestampDesc(Long tagId);
-    List<DataRecord> findTop120ByTagIdOrderByTimestampDesc(Long tagId);
+    List<DataRecord> findTop100ByTagIdOrderByTimestampDesc(Long tagId);
+
+    List<DataRecord> findTop60ByTagIdOrderByTimestampDesc(Long deviceId);
+
+    List<DataRecord> findTop180ByTagIdOrderByTimestampDesc(Long deviceId);
+
+    List<DataRecord> findTop10000ByTagIdOrderByTimestampDesc(Long deviceId);
 }

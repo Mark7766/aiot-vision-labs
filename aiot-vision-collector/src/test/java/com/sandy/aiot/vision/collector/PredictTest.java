@@ -1,11 +1,14 @@
 package com.sandy.aiot.vision.collector;
 
+import ai.djl.Application;
 import ai.djl.MalformedModelException;
 import ai.djl.inference.Predictor;
 import ai.djl.ndarray.NDArray;
 import ai.djl.ndarray.NDManager;
+import ai.djl.repository.MRL;
 import ai.djl.repository.zoo.Criteria;
 import ai.djl.repository.zoo.ModelNotFoundException;
+import ai.djl.repository.zoo.ModelZoo;
 import ai.djl.repository.zoo.ZooModel;
 import ai.djl.timeseries.Forecast;
 import ai.djl.timeseries.TimeSeriesData;
@@ -31,6 +34,16 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class PredictTest {
+    @Test
+    public void testListModel(){
+        Map<Application, List<MRL>> map = ModelZoo.listModels();
+        map.forEach((application, mrls) -> {
+            mrls.forEach(mrl -> {
+                log.info("application:{},mrl:{}", application,mrl);
+            });
+
+        });
+    }
     @Test
     public void testPath() throws URISyntaxException {
         // Resolve model from test classpath instead of relative working directory

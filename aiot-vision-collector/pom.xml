@@ -99,6 +99,11 @@
 			<artifactId>mxnet-model-zoo</artifactId>
 			<version>${djl.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>com.microsoft.onnxruntime</groupId>
+			<artifactId>onnxruntime</artifactId>
+			<version>1.18.0</version>
+		</dependency>
 	</dependencies>
 
 	<build>
