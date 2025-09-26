@@ -26,7 +26,7 @@ import java.util.*;
 
 @Service
 @Slf4j
-public class PredictServiceBak {
+public class PredictServicByDeepAr {
     @Autowired
     private ZooModel<TimeSeriesData, Forecast> zooModel;
     @Autowired
@@ -42,7 +42,7 @@ public class PredictServiceBak {
             if (deviceOpt.isEmpty()) {
                 throw new RuntimeException("Device[deviceId=" + deviceId + "] not found");
             }
-            List<DataRecord> dataRecords = dataRecordRepository.findTop1000ByTagIdOrderByTimestampDesc(deviceId);
+            List<DataRecord> dataRecords = dataRecordRepository.findTop10000ByTagIdOrderByTimestampDesc(deviceId);
             List<Float> recentValues = new ArrayList<>();
             List<LocalDateTime> recentTimestamps = new ArrayList<>();
             for (DataRecord dataRecord : dataRecords) {
@@ -52,7 +52,7 @@ public class PredictServiceBak {
                     try {
                         recentValues.add(Float.valueOf(String.valueOf(data.get(tagName))));
                         recentTimestamps.add(dataRecord.getTimestamp());
-                    } catch (NumberFormatException ignored) {}
+                    } catch (NumberFormatException ignored) { }
                 }
             }
             Collections.reverse(recentValues);
@@ -61,15 +61,18 @@ public class PredictServiceBak {
             float[] valueArray = new float[recentValues.size()];
             for (int i = 0; i < recentValues.size(); i++) valueArray[i] = recentValues.get(i);
             NDArray targetArray = manager.create(valueArray);
+            long[][] staticCats = {{0,0,0,0,0}};
+            NDArray staticCatArray = manager.create(staticCats);
             TimeSeriesData input = new TimeSeriesData(recentValues.size());
             input.setField(FieldName.TARGET, targetArray);
+            input.setField(FieldName.FEAT_STATIC_CAT, staticCatArray);
             input.setStartTime(recentTimestamps.isEmpty()? LocalDateTime.now(): recentTimestamps.get(0));
             try (Predictor<TimeSeriesData, Forecast> predictor = zooModel.newPredictor()) {
                 Forecast forecast = predictor.predict(input);
                 List<Float> predictions = new ArrayList<>();
                 try (NDArray mean = forecast.mean()) {
-                    float[] fa = mean.toFloatArray();
-                    for (float v : fa) predictions.add(v);
+                    float[] forecastArray = mean.toFloatArray();
+                    for (float v : forecastArray) predictions.add(v);
                 }
                 List<PredictionPoint> pts = buildPredictionPoints(recentTimestamps, predictions);
                 TimeSeriesDataModelVO vo = new TimeSeriesDataModelVO();
@@ -85,8 +88,7 @@ public class PredictServiceBak {
     private List<PredictionPoint> buildPredictionPoints(List<LocalDateTime> recentTs, List<Float> predictions){
         if (predictions==null||predictions.isEmpty()) return Collections.emptyList();
         if (recentTs==null||recentTs.isEmpty()){
-            LocalDateTime base = LocalDateTime.now();
-            return buildFromBase(base, Duration.ofMinutes(1), predictions);
+            return buildFromBase(LocalDateTime.now(), Duration.ofMinutes(1), predictions);
         }
         Duration step = inferStep(recentTs);
         LocalDateTime last = recentTs.get(recentTs.size()-1);
@@ -96,18 +98,15 @@ public class PredictServiceBak {
         }
         return list;
     }
-    private List<PredictionPoint> buildFromBase(LocalDateTime base, Duration step, List<Float> vals){
-        List<PredictionPoint> list = new ArrayList<>(vals.size());
-        for (int i=0;i<vals.size();i++){
-            list.add(PredictionPoint.builder().timestamp(base.plus(step.multipliedBy(i+1))).value(vals.get(i)).build());
-        }
+    private List<PredictionPoint> buildFromBase(LocalDateTime base, Duration step, List<Float> values){
+        List<PredictionPoint> list = new ArrayList<>(values.size());
+        for (int i=0;i<values.size();i++) list.add(PredictionPoint.builder().timestamp(base.plus(step.multipliedBy(i+1))).value(values.get(i)).build());
         return list;
     }
     private Duration inferStep(List<LocalDateTime> ts){
         if (ts.size()<2) return Duration.ofMinutes(1);
         List<Long> diffs = new ArrayList<>();
-        for (int i=1;i<ts.size();i++){ long ms = Duration.between(ts.get(i-1), ts.get(i)).toMillis(); if (ms>0) diffs.add(ms); }
-        if (diffs.isEmpty()) return Duration.ofMinutes(1);
+        for (int i=1;i<ts.size();i++){ long ms = java.time.Duration.between(ts.get(i-1), ts.get(i)).toMillis(); if (ms>0) diffs.add(ms);}        if (diffs.isEmpty()) return Duration.ofMinutes(1);
         Collections.sort(diffs);
         return Duration.ofMillis(diffs.get(diffs.size()/2));
     }

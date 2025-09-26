@@ -11,11 +11,13 @@ import com.sandy.aiot.vision.collector.entity.Device;
 import com.sandy.aiot.vision.collector.repository.DataRecordRepository;
 import com.sandy.aiot.vision.collector.repository.DeviceRepository;
 import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelVO;
+import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelVO.PredictionPoint;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.nio.FloatBuffer;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -34,7 +36,6 @@ public class PredictServiceByNB {
         if (deviceOpt.isEmpty()) {
             throw new RuntimeException("Device[deviceId=" + deviceId + "] not found");
         }
-        // 拉取更多历史，保证满足模型的季节滞后和上下文长度需求
         List<DataRecord> dataRecords = dataRecordRepository.findTop180ByTagIdOrderByTimestampDesc(deviceId);
         List<Float> recentValues = new ArrayList<>();
         List<LocalDateTime> recentTimestamps = new ArrayList<>();
@@ -45,35 +46,58 @@ public class PredictServiceByNB {
                 try {
                     recentValues.add(Float.valueOf(String.valueOf(data.get(tagName))));
                     recentTimestamps.add(dataRecord.getTimestamp());
-                } catch (NumberFormatException nfe) {
-                    // 非数值数据，跳过
-                }
+                } catch (NumberFormatException ignored) { }
             }
         }
-        // 按时间升序（最早 -> 最新）
         Collections.reverse(recentValues);
         Collections.reverse(recentTimestamps);
 
         float[] hisData = new float[recentValues.size()];
-        for (int i = 0; i < recentValues.size(); i++) {
-            hisData[i] = recentValues.get(i);
-        }
+        for (int i = 0; i < recentValues.size(); i++) hisData[i] = recentValues.get(i);
         List<Float> predictions = doPredict(hisData);
-        TimeSeriesDataModelVO timeSeriesDataModelVO = new TimeSeriesDataModelVO();
-        timeSeriesDataModelVO.setTimestamps(recentTimestamps); // 历史 timestamps（升序）
-        timeSeriesDataModelVO.setValues(recentValues); // 历史 values（升序）
-        timeSeriesDataModelVO.setPredictions(predictions);
-        log.info("Predict result size: hist={}, pred={}", recentValues.size(), predictions.size());
-        return timeSeriesDataModelVO;
+        List<PredictionPoint> pts = buildPredictionPoints(recentTimestamps, predictions);
+        TimeSeriesDataModelVO vo = new TimeSeriesDataModelVO();
+        vo.setTimestamps(recentTimestamps); // 内部保留历史时间用于步长推断
+        vo.setPredictionPoints(pts);
+        log.info("Predict result size: histTs={}, predPts={}", recentTimestamps.size(), pts.size());
+        return vo;
+    }
 
+    private List<PredictionPoint> buildPredictionPoints(List<LocalDateTime> recentTs, List<Float> predictions){
+        if (predictions==null||predictions.isEmpty()) return Collections.emptyList();
+        if (recentTs==null||recentTs.isEmpty()){
+            return buildFromBase(LocalDateTime.now(), Duration.ofSeconds(1), predictions);
+        }
+        Duration step = inferStep(recentTs);
+        LocalDateTime last = recentTs.get(recentTs.size()-1);
+        List<PredictionPoint> list = new ArrayList<>(predictions.size());
+        for (int i=0;i<predictions.size();i++){
+            list.add(PredictionPoint.builder().timestamp(last.plus(step.multipliedBy(i+1))).value(predictions.get(i)).build());
+        }
+        return list;
+    }
+    private List<PredictionPoint> buildFromBase(LocalDateTime base, Duration step, List<Float> values){
+        List<PredictionPoint> list = new ArrayList<>(values.size());
+        for (int i=0;i<values.size();i++) list.add(PredictionPoint.builder().timestamp(base.plus(step.multipliedBy(i+1))).value(values.get(i)).build());
+        return list;
+    }
+    private Duration inferStep(List<LocalDateTime> ts){
+        if (ts.size()<2) return Duration.ofSeconds(1);
+        List<Long> diffs = new ArrayList<>();
+        for (int i=1;i<ts.size();i++){
+            long ms = Duration.between(ts.get(i-1), ts.get(i)).toMillis();
+            if (ms>0) diffs.add(ms);
+        }
+        if (diffs.isEmpty()) return Duration.ofSeconds(1);
+        Collections.sort(diffs);
+        return Duration.ofMillis(diffs.get(diffs.size()/2));
     }
 
     // 解析 DataRecord.value JSON
     private Map<String, Object> parseRecordValue(DataRecord record) {
         if (record == null || record.getValue() == null) return Collections.emptyMap();
         try {
-            return objectMapper.readValue(record.getValue(), new TypeReference<>() {
-            });
+            return objectMapper.readValue(record.getValue(), new TypeReference<>() {});
         } catch (Exception e) {
             log.warn("解析数据失败 id={} err={}", record.getId(), e.getMessage());
             return Collections.emptyMap();
@@ -91,63 +115,34 @@ public class PredictServiceByNB {
     }
 
     private List<Float> doPredict(float[] sampleData) {
-        // 模型和数据参数
-        String modelPath = "/Users/mark/work/gitspace/pyspace/nbeats_iot_180.onnx"; // 替换为实际路径
-        int inputChunkLength = 180; // 过去1分钟（60秒），匹配模型 input_chunk_length
-        int outputChunkLength = 60; // 未来1分钟（60秒）
-        int batchSize = 1; // 批量大小
-        int nFeatures = 1; // 单变量
-
+        String modelPath = "/Users/mark/work/gitspace/pyspace/nbeats_iot_180.onnx"; // TODO: 外部化配置
+        int inputChunkLength = 180;
+        int outputChunkLength = 60; // 未来长度
+        int batchSize = 1;
+        int nFeatures = 1;
         List<Float> vs = new ArrayList<>();
         try (OrtEnvironment env = OrtEnvironment.getEnvironment();
              OrtSession session = env.createSession(modelPath, new OrtSession.SessionOptions())) {
-
-            // 打印模型输入/输出元数据（调试用）
-            System.out.println("模型输入名称: " + session.getInputNames());
-            System.out.println("模型输入形状: " + session.getInputInfo());
-            System.out.println("模型输出名称: " + session.getOutputNames());
-            System.out.println("模型输出形状: " + session.getOutputInfo());
-            // 准备输入数据（示例：从 CSV 加载最后 60 秒；这里用硬编码数组模拟）
             float[] inputData = new float[batchSize * inputChunkLength * nFeatures];
-            // 如果 sampleData.length < 60，填充 0 或报错
             if (sampleData.length < inputChunkLength) {
                 throw new IllegalArgumentException("sampleData 长度不足 " + inputChunkLength + "，请加载更多数据");
             }
-            // 截取最后 60 个值
             System.arraycopy(sampleData, sampleData.length - inputChunkLength, inputData, 0, inputChunkLength);
-            // 可选：从 CSV 动态加载（需添加 CSV 解析依赖，如 OpenCSV）
-            // 示例：使用 BufferedReader 读取 CSV，最后 60 行 value 列转换为 float
-            // 创建输入张量
             long[] inputShape = new long[]{batchSize, inputChunkLength, nFeatures};
-            OnnxTensor inputTensor = OnnxTensor.createTensor(
-                    env, FloatBuffer.wrap(inputData), inputShape);
-            // 设置输入（使用模型输入名称 "x_in"）
+            OnnxTensor inputTensor = OnnxTensor.createTensor(env, FloatBuffer.wrap(inputData), inputShape);
             Map<String, OnnxTensor> inputs = new HashMap<>();
             inputs.put("x_in", inputTensor);
-            // 运行推理
             try (OrtSession.Result result = session.run(inputs)) {
-                // 修复：cast 为 OnnxTensor 以获取形状和值
                 OnnxTensor outputTensor = (OnnxTensor) result.get(0);
-                long[] outputShape = outputTensor.getInfo().getShape();
-                // 修复：输出形状为 [1, 60, 1, 1] (4D)，因此 cast 到 float[][][][]
                 float[][][][] outputData = (float[][][][]) outputTensor.getValue();
-
-                // 打印输出
-                System.out.println("输出形状: " + Arrays.toString(outputShape)); // 实际为 [1, 60, 1, 1]
-                System.out.println("预测结果（未来60秒）:");
-
-                for (int i = 0; i < outputData[0].length; i++) {
-                    // 修复：访问 4D 数组 [batch][time][feat1][feat2]，由于 feat1/feat2=1，取 [0][i][0][0]
-                    System.out.println("时间步 " + (i + 1) + ": " + outputData[0][i][0][0]);
+                for (int i = 0; i < outputData[0].length && i < outputChunkLength; i++) {
                     vs.add(outputData[0][i][0][0]);
                 }
             }
         } catch (OrtException e) {
-            System.err.println("推理时出错: " + e.getMessage());
-            e.printStackTrace();
+            log.error("ONNX 推理异常: {}", e.getMessage());
         } catch (Exception e) {
-            System.err.println("一般错误: " + e.getMessage());
-            e.printStackTrace();
+            log.error("推理一般错误: {}", e.getMessage());
         }
         return vs;
     }

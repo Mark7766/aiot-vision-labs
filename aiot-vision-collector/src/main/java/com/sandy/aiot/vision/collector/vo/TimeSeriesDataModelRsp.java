@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -12,7 +13,17 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TimeSeriesDataModelRsp {
-    private List<String> timestamps;
-    private List<Float> values;
-    private List<Float> predictions;
+    private List<PredictionPointRsp> predictionPoints;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PredictionPointRsp {
+        private String timestamp;
+        private Float value;
+    }
+
+    public static TimeSeriesDataModelRsp empty(){
+        return TimeSeriesDataModelRsp.builder().predictionPoints(new ArrayList<>()).build();
+    }
 }

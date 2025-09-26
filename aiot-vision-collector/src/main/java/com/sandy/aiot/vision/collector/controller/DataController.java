@@ -182,11 +182,7 @@ public class DataController {
             return predictService.predict(deviceId, tagName).toTimeSeriesDataModelRsp();
         } catch (Exception e) {
             log.error("预测失败 deviceId={} tagName={} err={}", deviceId, tagName, e.getMessage());
-            return TimeSeriesDataModelRsp.builder()
-                    .timestamps(Collections.emptyList())
-                    .values(Collections.emptyList())
-                    .predictions(Collections.emptyList())
-                    .build();
+            return TimeSeriesDataModelRsp.empty();
         }
     }
 

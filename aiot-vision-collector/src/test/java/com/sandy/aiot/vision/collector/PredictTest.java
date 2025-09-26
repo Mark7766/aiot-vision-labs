@@ -17,6 +17,7 @@ import ai.djl.timeseries.translator.DeepARTranslator;
 import ai.djl.training.util.ProgressBar;
 import ai.djl.translate.TranslateException;
 import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelVO;
+import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelVO.PredictionPoint;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Assertions;
@@ -27,6 +28,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -94,14 +96,34 @@ public class PredictTest {
             for (float value : forecastArray) {
                 predictions.add(value);
             }
+            // 构造新的预测点列表（使用历史时间步长推断）
+            Duration step = inferStep(recentTimestamps);
+            LocalDateTime last = recentTimestamps.get(recentTimestamps.size()-1);
+            List<PredictionPoint> points = new ArrayList<>();
+            for (int i=0;i<predictions.size();i++){
+                points.add(PredictionPoint.builder().timestamp(last.plus(step.multipliedBy(i+1))).value(predictions.get(i)).build());
+            }
             TimeSeriesDataModelVO timeSeriesDataModelVO = new TimeSeriesDataModelVO();
-            timeSeriesDataModelVO.setTimestamps(recentTimestamps); // 保留所有 timestamps
-            timeSeriesDataModelVO.setValues(recentValues); // 保留所有 values
-            timeSeriesDataModelVO.setPredictions(predictions);
-            log.info("Result: {}", timeSeriesDataModelVO);
+            timeSeriesDataModelVO.setTimestamps(recentTimestamps); // 保留历史用于验证步长
+            timeSeriesDataModelVO.setPredictionPoints(points);
+            log.info("Result predictionPoints size={} firstPoint={} lastPoint={}", points.size(), points.isEmpty()?null:points.get(0), points.isEmpty()?null:points.get(points.size()-1));
+            Assertions.assertEquals(predictionLength, points.size(), "预测点数量不匹配");
         } catch (TranslateException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private Duration inferStep(List<LocalDateTime> ts){
+        if (ts.size()<2) return Duration.ofDays(30); // 测试数据为月度示例
+        List<Long> diffs = new ArrayList<>();
+        for (int i=1;i<ts.size();i++){
+            diffs.add(Duration.between(ts.get(i-1), ts.get(i)).toDays());
+        }
+        if (diffs.isEmpty()) return Duration.ofDays(30);
+        diffs.sort(Long::compare);
+        long medianDays = diffs.get(diffs.size()/2);
+        if (medianDays <=0) medianDays = 30;
+        return Duration.ofDays(medianDays);
     }
 
     private List<LocalDateTime> getRecentTimestamps() {

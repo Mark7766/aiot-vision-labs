@@ -46,10 +46,13 @@
         .lg-box-forecast{background:#ffa500}
         .metrics{margin-top:.4rem;color:#cfefff;font-size:.9rem}
         .metrics small{color:#7fdcff}
+        .chart-tooltip{position:absolute;pointer-events:none;background:rgba(0,0,0,.75);color:#fff;padding:.4rem .6rem;border-radius:4px;font-size:.75rem;line-height:1.2;border:1px solid #00bfff;z-index:10;white-space:nowrap;}
+        .chart-wrapper{position:relative;}
     </style>
 
-    <div id="chartPanel" class="card">
+    <div id="chartPanel" class="card chart-wrapper">
         <canvas id="histCanvas"></canvas>
+        <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
         <div class="legend">
             <span><i class="lg-box"></i> 历史</span>
             <span><i class="lg-box lg-box-forecast"></i> 预测</span>
@@ -108,6 +111,7 @@ const noDataDyn = document.getElementById('noDataDyn');
 const tbody = document.getElementById('histTbody');
 let ctx = canvas.getContext('2d');
 let refreshTimer = null;
+let chartMeta = null; // 存储最近一次绘图的尺度数据供鼠标事件使用
 
 // 全局预测缓存：{points:[{t,y}], intervalMs:number}
 window.prediction = null;
@@ -118,14 +122,30 @@ function isNumeric(x){
   return !isNaN(n) && isFinite(n);
 }
 
+function parseTs(s){
+  if(!s) return NaN;
+  s = String(s).trim();
+  // 标准化：yyyy-MM-dd HH:mm:ss -> yyyy-MM-ddTHH:mm:ss 以便 Date.parse 跨浏览器解析
+  if (s.length >= 19 && s.charAt(10) === ' ') {
+    const core = s.substring(0,19);
+    s = core.substring(0,10)+'T'+core.substring(11);
+  }
+  let t = Date.parse(s);
+  if (!isNaN(t)) return t;
+  // 备用策略：替换 - 为 / 再用 new Date()
+  try { t = new Date(s.replace(/-/g,'/')).getTime(); } catch(e){ t = NaN; }
+  return t;
+}
+
 function parseData(es){
   const pts = [];
   for (const e of es){
-    const t = new Date(e.timestamp.replace(/-/g,'/')).getTime();
+    const t = parseTs(e.timestamp);
+    if (isNaN(t)) continue;
     const raw = e.value;
     if (!isNumeric(raw)) continue;
     const y = Number(String(raw).replace(/,/g,''));
-    if (!isNaN(t) && isFinite(t)) pts.push({t, y});
+    if (!isNaN(y) && isFinite(y)) pts.push({t, y});
   }
   return pts;
 }
@@ -178,8 +198,8 @@ function drawChart(){
   if (yMin === yMax){ yMin -= 1; yMax += 1; }
   const yPad = (yMax - yMin) * 0.1;
   yMin -= yPad; yMax += yPad;
-
   const L = 60, R = 20, T = 20, B = 40;
+  // 背景及坐标
   ctx.fillStyle = '#cfefff';
   ctx.strokeStyle = 'rgba(0,191,255,0.35)';
   ctx.lineWidth = 1;
@@ -204,7 +224,6 @@ function drawChart(){
     ctx.fillStyle = '#7fdcff';
     ctx.fillText(label, xx, H-B+6);
   }
-
   // 历史线
   ctx.setLineDash([]);
   ctx.strokeStyle = '#00bfff'; ctx.lineWidth = 2;
@@ -218,7 +237,6 @@ function drawChart(){
     if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
   }
   ctx.stroke();
-
   ctx.fillStyle = '#7fdcff';
   for (let i=0;i<pts.length;i++){
     const p = pts[i];
@@ -228,8 +246,7 @@ function drawChart(){
     const y = H - B - (H-T-B) * yr;
     ctx.beginPath(); ctx.arc(x,y, 2.5*(window.devicePixelRatio||1), 0, Math.PI*2); ctx.fill();
   }
-
-  // 预测线（如有）
+  // 预测线
   if (fpts && fpts.length){
     ctx.setLineDash([6,4]);
     ctx.strokeStyle = '#ffa500'; ctx.lineWidth = 2;
@@ -242,9 +259,9 @@ function drawChart(){
       const y = H - B - (H-T-B) * yr;
       if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     }
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.stroke(); ctx.setLineDash([]);
   }
+  chartMeta = {tMin,tMax,yMin,yMax,L,R,T,B,W,H,pts,fpts};
 }
 
 function renderTable(){
@@ -361,21 +378,63 @@ function doPredict(){
   fetch(url, {cache:'no-store'})
     .then(r=>r.json())
     .then(data=>{
-      const preds = Array.isArray(data?.predictions) ? data.predictions.filter(isNumeric).map(Number) : [];
-      if (!preds.length){ window.prediction = null; updatePanels(); return; }
-      const interval = inferIntervalMs(pts) || 0;
-      const lastTs = pts[pts.length-1].t;
-      const points = [];
-      for (let i=0;i<preds.length;i++){
-        const t = lastTs + (interval>0 ? (i+1)*interval : (i+1)*1000);
-        points.push({t, y: preds[i]});
+      const pptsRaw = Array.isArray(data?.predictionPoints)? data.predictionPoints : [];
+      const tmp = [];
+      for (const pp of pptsRaw){
+        if (!pp || !pp.timestamp || !isNumeric(pp.value)) continue;
+        const t = parseTs(pp.timestamp);
+        if (isNaN(t)) continue;
+        tmp.push({t, y:Number(pp.value)});
       }
-      window.prediction = {points, intervalMs: (interval>0?interval:1000)};
+      tmp.sort((a,b)=>a.t-b.t);
+      if (!tmp.length){
+        window.prediction = null;
+        console.warn('[predict] 无有效预测时间点，原始数据：', pptsRaw);
+        updatePanels();
+        return;
+      }
+      // 若存在异常时间（过滤后 < 原始数），提示一次
+      if (tmp.length < pptsRaw.length) {
+        console.warn('[predict] 过滤掉无效预测时间点 count=', pptsRaw.length - tmp.length);
+      }
+      // 计算预测间隔（中位数）
+      let intervalMs = 0;
+      if (tmp.length>1){
+        const diffs=[]; for (let i=1;i<tmp.length;i++){ const d=tmp[i].t - tmp[i-1].t; if(d>0) diffs.push(d);} if(diffs.length){ diffs.sort((a,b)=>a-b); intervalMs = diffs[Math.floor(diffs.length/2)]; }
+      }
+      window.prediction = {points:tmp, intervalMs};
       updatePanels();
     })
-    .catch(()=>{ /* 忽略 */ })
+    .catch(err=>{ console.warn('[predict] 请求失败', err); })
     .finally(()=>{ btnPredict.disabled = false; predictStatus.style.display = 'none'; });
 }
+
+// 鼠标悬停提示
+const tooltip = document.getElementById('chartTooltip');
+canvas.addEventListener('mousemove', (e)=>{
+  if (!chartMeta) return; const {tMin,tMax,L,R,T,B,W,H,pts,fpts} = chartMeta;
+  const rect = canvas.getBoundingClientRect();
+  const ratio = window.devicePixelRatio||1;
+  const x = (e.clientX - rect.left) * ratio; const y = (e.clientY - rect.top)*ratio;
+  if (x < L || x > W-R || y < T || y > H-B){ tooltip.style.display='none'; return; }
+  const t = tMin + (tMax - tMin) * ((x - L)/(W - L - R));
+  function nearest(list){ if(!list||!list.length) return null; let best=null; let bd=Number.MAX_VALUE; for(const p of list){ const d=Math.abs(p.t - t); if (d<bd){ bd=d; best=p; } } return {p:best,dt:bd}; }
+  const nHist = nearest(pts); const nPred = nearest(fpts);
+  if (!nHist && !nPred){ tooltip.style.display='none'; return; }
+  const lines=[]; let showTs = t;
+  if (nHist && nHist.p){ lines.push(`历史: ${nHist.p.y.toFixed(3)}`); showTs = nHist.p.t; }
+  if (nPred && nPred.p){ lines.push(`预测: ${nPred.p.y.toFixed(3)}`); if(!nHist|| (nPred.dt < nHist.dt)) showTs = nPred.p.t; }
+  const dt = new Date(showTs);
+  const tsStr = `${dt.getFullYear()}-${(dt.getMonth()+1).toString().padStart(2,'0')}-${dt.getDate().toString().padStart(2,'0')} ${dt.getHours().toString().padStart(2,'0')}:${dt.getMinutes().toString().padStart(2,'0')}:${dt.getSeconds().toString().padStart(2,'0')}`;
+  lines.unshift(tsStr);
+  tooltip.innerHTML = lines.join('<br/>');
+  tooltip.style.display='';
+  // 定位（使用原始 CSS 像素）
+  const canvasLeft = rect.left + window.scrollX; const canvasTop = rect.top + window.scrollY;
+  tooltip.style.left = (e.clientX + 12) + 'px';
+  tooltip.style.top = (e.clientY + 12) + 'px';
+});
+canvas.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
 
 btnLine?.addEventListener('click', showLine);
 btnTable?.addEventListener('click', showTable);
