@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sandy.aiot.vision.collector.entity.DataRecord;
 import com.sandy.aiot.vision.collector.entity.Device;
-import com.sandy.aiot.vision.collector.repository.DataRecordRepository;
 import com.sandy.aiot.vision.collector.repository.DeviceRepository;
 import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelVO;
 import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelVO.PredictionPoint;
@@ -30,7 +29,7 @@ public class PredictService {
     @Autowired
     private DeviceRepository deviceRepository;
     @Autowired
-    private DataRecordRepository dataRecordRepository;
+    private TsFileStorageService tsFileStorageService;
     @Autowired
     private ObjectMapper objectMapper;
 
@@ -41,23 +40,18 @@ public class PredictService {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    public TimeSeriesDataModelVO predict(Long deviceId, String tagName) {
+    public TimeSeriesDataModelVO predict(Long deviceId, Long tagId) {
         Optional<Device> deviceOpt = deviceRepository.findById(deviceId);
         if (deviceOpt.isEmpty()) {
             throw new RuntimeException("Device[deviceId=" + deviceId + "] not found");
         }
-        List<DataRecord> dataRecords = dataRecordRepository.findTop180ByTagIdOrderByTimestampDesc(deviceId);
+        // 替换为 TsFile 读取
+        List<DataRecord> dataRecords = tsFileStorageService.findTopN(deviceId, tagId,3);
         List<Float> recentValues = new ArrayList<>();
         List<LocalDateTime> recentTimestamps = new ArrayList<>();
         for (DataRecord dataRecord : dataRecords) {
-            Map<String, Object> parsed = parseRecordValue(dataRecord);
-            Map<String, Object> data = extractDataMap(parsed);
-            if (data != null && data.containsKey(tagName)) {
-                try {
-                    recentValues.add(Float.valueOf(String.valueOf(data.get(tagName))));
-                    recentTimestamps.add(dataRecord.getTimestamp());
-                } catch (NumberFormatException ignored) { }
-            }
+                recentValues.add(Float.valueOf((String)dataRecord.getValue()));
+                recentTimestamps.add(dataRecord.getTimestamp());
         }
         Collections.reverse(recentValues); // 升序
         Collections.reverse(recentTimestamps);

@@ -17,6 +17,10 @@ spring:
     console:
       enabled: true
 
+# TsFile 存储配置
+tsfile:
+  path: data/records.tsfile
+
 logging:
   level:
     aiot.vision.collector: INFO

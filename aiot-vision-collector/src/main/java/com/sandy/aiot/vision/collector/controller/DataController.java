@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sandy.aiot.vision.collector.entity.DataRecord;
 import com.sandy.aiot.vision.collector.entity.Device;
 import com.sandy.aiot.vision.collector.entity.Tag;
-import com.sandy.aiot.vision.collector.repository.DataRecordRepository;
 import com.sandy.aiot.vision.collector.repository.DeviceRepository;
 import com.sandy.aiot.vision.collector.repository.TagRepository;
 import com.sandy.aiot.vision.collector.service.CollectorService;
 import com.sandy.aiot.vision.collector.service.PredictService;
+import com.sandy.aiot.vision.collector.service.TsFileStorageService;
 import com.sandy.aiot.vision.collector.vo.NamespaceVO;
 import com.sandy.aiot.vision.collector.vo.TagValueVO;
 import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelRsp;
@@ -21,6 +21,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -29,8 +30,6 @@ import java.util.stream.Collectors;
 @RequestMapping("/data")
 @Slf4j
 public class DataController {
-    @Autowired
-    private DataRecordRepository dataRecordRepository;
     @Autowired
     private CollectorService collectorService;
     @Autowired
@@ -41,47 +40,23 @@ public class DataController {
     private ObjectMapper objectMapper;
     @Autowired
     private PredictService predictService;
+    @Autowired
+    private TsFileStorageService tsFileStorageService;
 
     private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    /**
+     * 获取所有设备的所有tag的最新值
+     * @param model
+     * @return
+     */
     @GetMapping
     public String viewLatestPerDevice(Model model) {
-        List<Device> devices = deviceRepository.findAll();
-        List<DeviceSnapshotView> snapshots = new ArrayList<>();
-        for (Device device : devices) {
-            DeviceSnapshotView view = new DeviceSnapshotView();
-            view.setDeviceId(device.getId());
-            view.setDeviceName(device.getName());
-            view.setProtocol(device.getProtocol());
-            view.setConnectionString(device.getConnectionString());
-            // tags config
-            List<Tag> tags = device.getTags();
-            Map<String, Tag> tagByName = tags == null ? Collections.emptyMap() : tags.stream().collect(Collectors.toMap(Tag::getName, t -> t));
-            dataRecordRepository.findTop1ByTagIdOrderByTimestampDesc(device.getId()).ifPresent(rec -> {
-                view.setTimestamp(rec.getTimestamp() == null ? null : TS_FMT.format(rec.getTimestamp()));
-                Map<String, Object> parsed = parseRecordValue(rec);
-                // parsed structure wrapper: {deviceId, device, data:{...}, ts:...}
-                Map<String, Object> data = extractDataMap(parsed);
-                List<TagValueView> tagValues = new ArrayList<>();
-                if (data != null) {
-                    for (Map.Entry<String, Object> e : data.entrySet()) {
-                        String tagName = e.getKey();
-                        Object value = e.getValue();
-                        if (tagName.startsWith("_") || tagName.equals("mode")) continue; // skip meta
-                        TagValueView tv = new TagValueView();
-                        tv.setName(tagName);
-                        Tag cfg = tagByName.get(tagName);
-                        tv.setAddress(cfg == null ? "" : cfg.getAddress());
-                        tv.setValue(value == null ? "" : String.valueOf(value));
-                        tagValues.add(tv);
-                    }
-                }
-                view.setTags(tagValues);
-            });
-            snapshots.add(view);
-        }
+        // 默认最近分钟范围（用于过滤最新数据，避免取到过旧的值）
+        int minutesWindow = 5;
+        List<DeviceSnapshotView> snapshots = buildLatestSnapshots(minutesWindow);
         model.addAttribute("devices", snapshots);
-        return "data"; // 使用新的 data.html 模板
+        return "data";
     }
 
     // 手动触发采集
@@ -92,32 +67,42 @@ public class DataController {
     }
 
     // 历史记录页面（单个 tag）
-    @GetMapping("/history/{deviceId}/{tagName}")
-    public String tagHistory(@PathVariable Long deviceId, @PathVariable String tagName, Model model) {
+    @GetMapping("/history/{deviceId}/{tagId}")
+    public String tagHistory(@PathVariable Long deviceId,
+                             @PathVariable Long tagId,
+                             @RequestParam(value = "minutes", required = false, defaultValue = "3") int minutes,
+                             Model model) {
+        if (minutes <= 0) minutes = 3; // 合理兜底
         Optional<Device> deviceOpt = deviceRepository.findById(deviceId);
         if (deviceOpt.isEmpty()) {
             model.addAttribute("error", "设备不存在");
             return "tag-history";
         }
         Device device = deviceOpt.get();
-        List<DataRecord> history = dataRecordRepository.findTop200ByTagIdOrderByTimestampDesc(deviceId);
+        // 获取测点
+        Optional<Tag> tagOpt = tagRepository.findById(tagId);
+        if (tagOpt.isEmpty() || tagOpt.get().getDevice() == null || !Objects.equals(tagOpt.get().getDevice().getId(), deviceId)) {
+            model.addAttribute("error", "测点不存在或不属于该设备");
+            return "tag-history";
+        }
+        Tag tag = tagOpt.get();
+        // 直接按最近 minutes 分钟获取该测点数据（服务内已按时间倒序）
+        List<DataRecord> history = tsFileStorageService.findTopN(deviceId, tagId, minutes);
         List<TagHistoryEntry> entries = new ArrayList<>();
         for (DataRecord rec : history) {
-            Map<String, Object> parsed = parseRecordValue(rec);
-            Map<String, Object> data = extractDataMap(parsed);
-            if (data != null && data.containsKey(tagName)) {
-                TagHistoryEntry e = new TagHistoryEntry();
-                e.setTimestamp(rec.getTimestamp() == null ? null : TS_FMT.format(rec.getTimestamp()));
-                Object val = data.get(tagName);
-                e.setValue(val == null ? "" : String.valueOf(val));
-                entries.add(e);
-            }
+            TagHistoryEntry e = new TagHistoryEntry();
+            e.setTimestamp(rec.getTimestamp() == null ? null : TS_FMT.format(rec.getTimestamp()));
+            Object val = rec.getValue();
+            e.setValue(val == null ? "" : String.valueOf(val));
+            entries.add(e);
         }
-        // 按时间升序显示
+        // 转为时间升序（页面脚本及模板期望升序）
         Collections.reverse(entries);
         model.addAttribute("device", device);
-        model.addAttribute("tagName", tagName);
+        model.addAttribute("tagName", tag.getName());
+        model.addAttribute("tagId", tag.getId()); // 新增: 传递 tagId 给前端脚本使用
         model.addAttribute("entries", entries);
+        model.addAttribute("minutes", minutes);
         return "tag-history";
     }
 
@@ -125,63 +110,35 @@ public class DataController {
     @GetMapping(value = "/api/latest", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     public List<DeviceSnapshotView> apiLatest() {
-        List<Device> devices = deviceRepository.findAll();
-        List<DeviceSnapshotView> snapshots = new ArrayList<>();
-        for (Device device : devices) {
-            DeviceSnapshotView view = new DeviceSnapshotView();
-            view.setDeviceId(device.getId());
-            view.setDeviceName(device.getName());
-            dataRecordRepository.findTop1ByTagIdOrderByTimestampDesc(device.getId()).ifPresent(rec -> {
-                view.setTimestamp(rec.getTimestamp() == null ? null : TS_FMT.format(rec.getTimestamp()));
-                Map<String, Object> parsed = parseRecordValue(rec);
-                Map<String, Object> data = extractDataMap(parsed);
-                List<TagValueView> tagValues = new ArrayList<>();
-                if (data != null) {
-                    for (Map.Entry<String, Object> e : data.entrySet()) {
-                        String tagName = e.getKey();
-                        if (tagName.startsWith("_") || tagName.equals("mode")) continue;
-                        TagValueView tv = new TagValueView();
-                        tv.setName(tagName);
-                        tv.setValue(e.getValue() == null ? "" : String.valueOf(e.getValue()));
-                        tagValues.add(tv);
-                    }
-                }
-                view.setTags(tagValues);
-            });
-            snapshots.add(view);
-        }
-        return snapshots;
+        int minutesWindow = 5; // 与页面逻辑保持一致
+        return buildLatestSnapshots(minutesWindow);
     }
 
     // 提供指定设备/标签的历史数据 JSON（最近200条，按时间升序）
-    @GetMapping(value = "/api/history/{deviceId}/{tagName}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/api/history/{deviceId}/{tagId}", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
-    public List<TagHistoryEntry> apiTagHistory(@PathVariable Long deviceId, @PathVariable String tagName){
-        List<DataRecord> history = dataRecordRepository.findTop200ByTagIdOrderByTimestampDesc(deviceId);
+    public List<TagHistoryEntry> apiTagHistory(@PathVariable Long deviceId, @PathVariable Long tagId){
+        List<DataRecord> history = tsFileStorageService.findTopN(deviceId, tagId,10);
         List<TagHistoryEntry> list = new ArrayList<>();
         for (DataRecord rec : history) {
-            Map<String,Object> parsed = parseRecordValue(rec);
-            Map<String,Object> data = extractDataMap(parsed);
-            if(data!=null && data.containsKey(tagName)){
-                TagHistoryEntry e = new TagHistoryEntry();
-                e.setTimestamp(rec.getTimestamp()==null?null:TS_FMT.format(rec.getTimestamp()));
-                Object val = data.get(tagName);
-                e.setValue(val==null?"":String.valueOf(val));
-                list.add(e);
-            }
+            TagHistoryEntry e = new TagHistoryEntry();
+            e.setTimestamp(rec.getTimestamp() == null ? null : TS_FMT.format(rec.getTimestamp()));
+            Object val = rec.getValue();
+            e.setValue(val == null ? "" : String.valueOf(val));
+            list.add(e);
         }
         Collections.reverse(list); // 升序
         return list;
     }
 
     // 新增：预测接口，返回历史与预测结果
-    @GetMapping(value = "/api/predict/{deviceId}/{tagName}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/api/predict/{deviceId}/{tagId}", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
-    public TimeSeriesDataModelRsp apiPredict(@PathVariable Long deviceId, @PathVariable String tagName) {
+    public TimeSeriesDataModelRsp apiPredict(@PathVariable Long deviceId, @PathVariable Long tagId) {
         try {
-            return predictService.predict(deviceId, tagName).toTimeSeriesDataModelRsp();
+            return predictService.predict(deviceId, tagId).toTimeSeriesDataModelRsp();
         } catch (Exception e) {
-            log.error("预测失败 deviceId={} tagName={} err={}", deviceId, tagName, e.getMessage());
+            log.error("预测失败 deviceId={} tagId={} err={}", deviceId, tagId, e.getMessage());
             return TimeSeriesDataModelRsp.empty();
         }
     }
@@ -215,28 +172,52 @@ public class DataController {
         }
     }
 
-    // 解析 DataRecord.value JSON
-    private Map<String, Object> parseRecordValue(DataRecord record) {
-        if (record == null || record.getValue() == null) return Collections.emptyMap();
-        try {
-            return objectMapper.readValue(record.getValue(), new TypeReference<>() {});
-        } catch (Exception e) {
-            log.warn("解析数据失败 id={} err={}", record.getId(), e.getMessage());
-            return Collections.emptyMap();
+    // 聚合方法：按设备/标签获取最近 minutesWindow 分钟内最新值
+    private List<DeviceSnapshotView> buildLatestSnapshots(int minutesWindow){
+        List<Device> devices = deviceRepository.findAllWithTags();
+        if(devices.isEmpty()) return Collections.emptyList();
+        List<DeviceSnapshotView> result = new ArrayList<>();
+        for (Device d : devices) {
+            DeviceSnapshotView view = new DeviceSnapshotView();
+            view.setDeviceId(d.getId());
+            view.setDeviceName(d.getName());
+            view.setProtocol(d.getProtocol());
+            view.setConnectionString(d.getConnectionString());
+            LocalDateTime latestTs = null;
+            List<Tag> tags = d.getTags();
+            if(tags!=null){
+                for (Tag t : tags) {
+                    TagValueView tv = new TagValueView();
+                    tv.setId(t.getId());
+                    tv.setName(t.getName());
+                    tv.setAddress(t.getAddress());
+                    try {
+                        List<DataRecord> recs = tsFileStorageService.findTopN(d.getId(), t.getId(), minutesWindow);
+                        if(!recs.isEmpty()){
+                            DataRecord latest = recs.get(0); // 已倒序
+                            if(latest.getTimestamp()!=null && (latestTs==null || latest.getTimestamp().isAfter(latestTs))){
+                                latestTs = latest.getTimestamp();
+                            }
+                            Object val = latest.getValue();
+                            tv.setValue(val==null?"":String.valueOf(val));
+                        } else {
+                            tv.setValue("");
+                        }
+                    } catch (Exception e){
+                        log.warn("获取最新值失败 deviceId={} tagId={} err={}", d.getId(), t.getId(), e.getMessage());
+                        tv.setValue("");
+                    }
+                    view.getTags().add(tv);
+                }
+            }
+            view.setTimestamp(latestTs==null?"":TS_FMT.format(latestTs));
+            result.add(view);
         }
+        // 可按设备ID排序，保证稳定
+        result.sort(Comparator.comparing(DeviceSnapshotView::getDeviceId, Comparator.nullsLast(Long::compareTo)));
+        return result;
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> extractDataMap(Map<String, Object> parsed) {
-        if (parsed == null) return null;
-        Object data = parsed.get("data");
-        if (data instanceof Map) {
-            return (Map<String, Object>) data;
-        }
-        return null;
-    }
-
-    // 视图 DTO
     @Data
     public static class DeviceSnapshotView {
         private Long deviceId;
@@ -249,6 +230,7 @@ public class DataController {
 
     @Data
     public static class TagValueView {
+        private Long id;        // 新增: tag 主键 ID
         private String name;
         private String address;
         private String value;

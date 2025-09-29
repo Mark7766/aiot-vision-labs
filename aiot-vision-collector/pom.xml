@@ -14,9 +14,7 @@
 	<name>aiot-vision-collector</name>
 	<properties>
 		<java.version>17</java.version>
-		<plc4x.version>0.13.1</plc4x.version>
 		<milo.version>0.6.13</milo.version>
-		<djl.version>0.34.0</djl.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -41,79 +39,38 @@
 			<artifactId>lombok</artifactId>
 			<version>1.18.40</version>
 		</dependency>
+		<!-- TsFile for time-series snapshot storage -->
 		<dependency>
 			<groupId>org.apache.iotdb</groupId>
 			<artifactId>tsfile</artifactId>
 			<version>1.3.2</version>
 		</dependency>
-		<!-- 添加 IoTDB Server 依赖，支持嵌入式模式和 SQL 查询 -->
 		<dependency>
-			<groupId>org.apache.iotdb</groupId>
-			<artifactId>iotdb-server</artifactId>
-			<version>1.3.2</version>
+			<groupId>org.antlr</groupId>
+			<artifactId>antlr4-runtime</artifactId>
+			<version>4.13.1</version>
+		</dependency>
+		<!-- ONNX runtime kept for NB 预测 -->
+		<dependency>
+			<groupId>com.microsoft.onnxruntime</groupId>
+			<artifactId>onnxruntime</artifactId>
+			<version>1.18.0</version>
+		</dependency>
+		<!-- Milo OPC UA client (still used) -->
+		<dependency>
+			<groupId>org.eclipse.milo</groupId>
+			<artifactId>sdk-client</artifactId>
+			<version>${milo.version}</version>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.plc4x</groupId>
-			<artifactId>plc4j-api</artifactId>
-			<version>${plc4x.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.plc4x</groupId>
-			<artifactId>plc4j-driver-modbus</artifactId>
-			<version>${plc4x.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.plc4x</groupId>
-			<artifactId>plc4j-driver-opcua</artifactId>
-			<version>${plc4x.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.plc4x</groupId>
-			<artifactId>plc4j-scraper</artifactId>
-			<version>${plc4x.version}</version>
-		</dependency>
-		<!-- Jackson for JSON -->
-		<dependency>
-			<groupId>com.fasterxml.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
-		</dependency>
-		<!-- Eclipse Milo 仅用于测试（例如端点列举），生产采集逻辑已移除 -->
-		<dependency>
-			<groupId>org.eclipse.milo</groupId>
-			<artifactId>sdk-client</artifactId>
-			<version>${milo.version}</version>
-<!--			<scope>test</scope>-->
-			<optional>true</optional>
-		</dependency>
-		<dependency>
-			<groupId>ai.djl.timeseries</groupId>
-			<artifactId>timeseries</artifactId>
-			<version>${djl.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>ai.djl</groupId>
-			<artifactId>api</artifactId>
-			<version>${djl.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>ai.djl.mxnet</groupId>
-			<artifactId>mxnet-engine</artifactId>
-			<version>${djl.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>ai.djl.mxnet</groupId>
-			<artifactId>mxnet-model-zoo</artifactId>
-			<version>${djl.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>com.microsoft.onnxruntime</groupId>
-			<artifactId>onnxruntime</artifactId>
-			<version>1.18.0</version>
 		</dependency>
 	</dependencies>
 

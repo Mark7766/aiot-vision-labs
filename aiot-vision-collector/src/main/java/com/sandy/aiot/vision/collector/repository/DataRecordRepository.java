@@ -7,6 +7,11 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 已弃用：DataRecord 现在改为通过 TsFileStorageService 存取，保留此 Repository 仅避免数据库自动迁移报错。
+ * 后续可在确认不再使用 H2 持久化历史采集数据后删除。
+ */
+@Deprecated
 @Repository
 public interface DataRecordRepository extends JpaRepository<DataRecord, Long> {
     // 按时间倒序获取最新记录

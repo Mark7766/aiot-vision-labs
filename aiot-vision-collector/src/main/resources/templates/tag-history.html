@@ -83,7 +83,8 @@
 // 直接注入 entries、设备与标签标识
 const entries = /*[[${entries}]]*/ [];
 const deviceId = /*[[${device.id}]]*/ 0;
-const tagName = /*[[${tagName}]]*/ '';
+const tagName = /*[[${tagName}]]*/ ''; // 仅用于展示
+const tagId = /*[[${tagId}]]*/ 0;      // 新增: 用于后端接口调用
 
 // 兼容：如果内联未生效，则从表格解析
 (function ensureEntries(){
@@ -296,8 +297,8 @@ function updatePanels(){
 }
 
 function fetchLatest(){
-  if (!deviceId || !tagName) return;
-  const url = `/data/api/history/${deviceId}/${encodeURIComponent(tagName)}`;
+  if (!deviceId || !tagId) return;
+  const url = `/data/api/history/${deviceId}/${tagId}`;
   fetch(url, {cache:'no-store'})
     .then(r => r.ok ? r.json() : [])
     .then(list => {
@@ -370,11 +371,11 @@ function updateAccuracy(){
 }
 
 function doPredict(){
-  if (!deviceId || !tagName) return;
+  if (!deviceId || !tagId) return;
   const pts = parseData(window.entries||[]);
   if (!pts.length){ alert('当前没有可用于预测的数值数据'); return; }
   btnPredict.disabled = true; predictStatus.style.display = '';
-  const url = `/data/api/predict/${deviceId}/${encodeURIComponent(tagName)}`;
+  const url = `/data/api/predict/${deviceId}/${tagId}`;
   fetch(url, {cache:'no-store'})
     .then(r=>r.json())
     .then(data=>{

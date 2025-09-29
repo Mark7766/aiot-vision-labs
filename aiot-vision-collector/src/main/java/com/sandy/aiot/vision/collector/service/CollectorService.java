@@ -1,16 +1,15 @@
 package com.sandy.aiot.vision.collector.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sandy.aiot.vision.collector.vo.NamespaceVO;
 import com.sandy.aiot.vision.collector.entity.DataRecord;
+import com.sandy.aiot.vision.collector.vo.NamespaceVO;
 import com.sandy.aiot.vision.collector.entity.Device;
 import com.sandy.aiot.vision.collector.entity.Tag;
-import com.sandy.aiot.vision.collector.repository.DataRecordRepository;
 import com.sandy.aiot.vision.collector.repository.DeviceRepository;
 import com.sandy.aiot.vision.collector.repository.TagRepository;
 import com.sandy.aiot.vision.collector.vo.TagValueVO;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.plc4x.java.api.PlcDriverManager;
+import org.apache.iotdb.tsfile.exception.write.WriteProcessException;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
 import org.eclipse.milo.opcua.sdk.client.api.UaClient;
 import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
@@ -34,21 +33,21 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PreDestroy;
+
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
 public class CollectorService {
     private static final Logger logger = LoggerFactory.getLogger(CollectorService.class);
-    private final PlcDriverManager driverManager = PlcDriverManager.getDefault();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
@@ -56,10 +55,7 @@ public class CollectorService {
     @Autowired
     private TagRepository tagRepository; // 保留，后续可能单点读取用
     @Autowired
-    private DataRecordRepository dataRecordRepository;
-    // 避免在没有设备时每次都插入占位记录
-    private volatile boolean emittedNoDeviceRecord = false;
-
+    private TsFileStorageService tsFileStorageService;
     // Cache for reusing OPC UA sessions to avoid TooManySessions burst
     private final Map<Long, OpcUaClient> opcUaClients = new ConcurrentHashMap<>();
     // Backoff map: deviceId -> epochMilli until which collection is skipped
@@ -70,7 +66,10 @@ public class CollectorService {
     @PreDestroy
     public void shutdown() {
         opcUaClients.forEach((id, c) -> {
-            try { c.disconnect().get(3, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception ignore) {}
+            try {
+                c.disconnect().get(3, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception ignore) {
+            }
         });
         opcUaClients.clear();
     }
@@ -79,7 +78,6 @@ public class CollectorService {
         return opcUaClients.compute(device.getId(), (id, existing) -> {
             try {
                 if (existing != null) {
-                    // Attempt a lightweight ping by reading namespace array maybe? Skip for now
                     return existing; // assume still valid; Milo reconnects on demand
                 }
                 OpcUaClient c = OpcUaClient.create(device.getConnectionString());
@@ -87,7 +85,10 @@ public class CollectorService {
                 return c;
             } catch (Exception e) {
                 if (existing != null) {
-                    try { existing.disconnect().get(); } catch (Exception ignore) {}
+                    try {
+                        existing.disconnect().get();
+                    } catch (Exception ignore) {
+                    }
                 }
                 throw new RuntimeException(e);
             }
@@ -97,7 +98,10 @@ public class CollectorService {
     private void invalidateClient(Long deviceId) {
         OpcUaClient c = opcUaClients.remove(deviceId);
         if (c != null) {
-            try { c.disconnect().get(); } catch (Exception ignore) {}
+            try {
+                c.disconnect().get();
+            } catch (Exception ignore) {
+            }
         }
     }
 
@@ -188,13 +192,7 @@ public class CollectorService {
     private void doCollect() {
         List<Device> devices = deviceRepository.findAllWithTags();
         if (devices.isEmpty()) {
-            if (!emittedNoDeviceRecord && dataRecordRepository.count() == 0) {
-                createInfoRecord("no-devices", Map.of(
-                        "info", "尚未配置设备，前往 /devices 添加",
-                        "timestamp", LocalDateTime.now().toString()
-                ));
-                emittedNoDeviceRecord = true;
-            }
+            log.info("尚未配置设备，前往 /devices 添加");
             return;
         }
         for (Device device : devices) {
@@ -204,104 +202,79 @@ public class CollectorService {
             }
             List<Tag> tags = device.getTags();
             if (tags == null || tags.isEmpty()) {
-                persistDeviceSnapshot(device.getId(), device.getName(), Map.of(
-                        "warning", "设备未配置点位"
-                ));
+                log.warn("设备 {} 未配置点位，跳过采集", device.getName());
                 continue;
             }
             String conn = device.getConnectionString();
             boolean isOpcUa = conn != null && conn.startsWith("opcua:tcp://");
-            Map<String, Object> values = null;
-            OpcUaClient client = null;
-            try {
-                client = getOrCreateClient(device);
-                UaClient uaClient = client; // OpcUaClient implements UaClient interface
-                List<NodeId> nodeIds = new ArrayList<>();
-                List<Tag> validTags = new ArrayList<>();
-                for (Tag tag : tags) {
-                    try {
-                        nodeIds.add(NodeId.parse(tag.getAddress()));
-                        validTags.add(tag);
-                    } catch (Exception parseEx) {
-                        log.warn("解析地址失败 device={} tag={} addr={} err={}", device.getName(), tag.getName(), tag.getAddress(), parseEx.getMessage());
-                    }
-                }
-                if (nodeIds.isEmpty()) {
-                    persistDeviceSnapshot(device.getId(), device.getName(), Map.of(
-                            "warning", "无有效点位地址"
-                    ));
-                    continue;
-                }
-                CompletableFuture<List<DataValue>> completableFuture = uaClient.readValues(0, TimestampsToReturn.Source, nodeIds);
-                List<DataValue> dataValues = completableFuture.get();
-                values = new LinkedHashMap<>();
-                for (int i = 0; i < nodeIds.size(); i++) {
-                    NodeId nodeId = nodeIds.get(i);
-                    DataValue dataValue = dataValues.get(i);
-                    Tag tag = validTags.get(i);
-                    Object v = (dataValue == null || dataValue.getValue() == null) ? null : dataValue.getValue().getValue();
-                    log.info("TagName:{},NodeId: {},value:{}", tag.getName(), nodeId, v);
-                    values.put(tag.getName(), v);
-                }
-            } catch (Exception ex) {
-                String rawMsg = ex.getMessage();
-                String msg = rawMsg;
-                if (msg != null && msg.length() > 160) {
-                    msg = msg.substring(0, 160) + "..."; // 避免过长
-                }
-                logger.error("采集失败 device={} error={}:{}", device.getName(), ex.getClass().getSimpleName(), msg);
-                if (rawMsg != null && rawMsg.contains("Bad_TooManySessions")) {
-                    applyBackoff(device);
-                } else {
-                    // Other errors -> invalidate to force reconnect next round
-                    invalidateClient(device.getId());
-                }
-                persistDeviceSnapshot(device.getId(), device.getName(), Map.of(
-                        "error", ex.getClass().getSimpleName() + ":" + msg,
-                        "tip", rawMsg != null && rawMsg.contains("Bad_TooManySessions") ? "服务器会话已满，等待回退结束后自动重试" : "检查连接字符串或设备网络",
-                        "mode", isOpcUa ? "opcua-plc4x-fail" : "plc4x-fail",
-                        "time", LocalDateTime.now().toString()
-                ));
-            }
-            if (values != null) {
-                persistDeviceSnapshot(device.getId(), device.getName(), values);
+            if (isOpcUa) {
+                log.info("开始采集 OPC UA 设备: {} , tags count: {}", device.getName(), tags.size());
+                doOpcUaCollect(device, tags);
+            } else {
+                log.warn("不支持的设备类型，跳过采集 Device={} ConnectionString={}", device.getName(), conn);
             }
         }
     }
 
-    private void persistDeviceSnapshot(Long deviceId, String deviceName, Map<String, Object> values) {
+    private void doOpcUaCollect(Device device, List<Tag> tags) throws IOException, WriteProcessException {
+        List<DataRecord> dataRecords = new ArrayList<>();
+        OpcUaClient client = null;
         try {
-            Map<String, Object> wrapper = new LinkedHashMap<>();
-            wrapper.put("deviceId", deviceId);
-            wrapper.put("device", deviceName);
-            wrapper.put("data", values);
-            wrapper.put("ts", LocalDateTime.now().toString());
-            String jsonValue = objectMapper.writeValueAsString(wrapper);
-            DataRecord record = new DataRecord();
-            record.setTagId(deviceId); // 复用字段：存放设备ID
-            record.setValue(jsonValue);
-            record.setTimestamp(LocalDateTime.now());
-            dataRecordRepository.save(record);
+            client = getOrCreateClient(device);
+            UaClient uaClient = client;
+            List<NodeId> nodeIds = new ArrayList<>();
+            List<Tag> validTags = new ArrayList<>();
+            for (Tag tag : tags) {
+                try {
+                    nodeIds.add(NodeId.parse(tag.getAddress()));
+                    validTags.add(tag);
+                } catch (Exception parseEx) {
+                    log.warn("解析地址失败 device={} tag={} addr={} err={}", device.getName(), tag.getName(), tag.getAddress(), parseEx.getMessage());
+                }
+            }
+            if (nodeIds.isEmpty()) {
+                //打印日志
+                log.warn("设备 {} 无有效点位地址，跳过采集", device.getName());
+                return;
+            }
+            CompletableFuture<List<DataValue>> completableFuture = uaClient.readValues(0, TimestampsToReturn.Source, nodeIds);
+            List<DataValue> dataValues = completableFuture.get();
+            for (int i = 0; i < nodeIds.size(); i++) {
+                NodeId nodeId = nodeIds.get(i);
+                DataValue dataValue = dataValues.get(i);
+                Tag tag = validTags.get(i);
+                Object v = (dataValue == null || dataValue.getValue() == null) ? null : dataValue.getValue().getValue();
+                log.info("TagName:{},NodeId: {},value:{}", tag.getName(), nodeId, v);
+                if (v != null) {
+                    dataRecords.add(DataRecord.builder()
+                            .deviceId(device.getId())
+                            .tagId(tag.getId())
+                            .value(v)
+                            .timestamp(LocalDateTime.now())
+                            .build());
+                }
+
+            }
         } catch (Exception ex) {
-            logger.error("序列化数据失败 deviceId={} err={}", deviceId, ex.getMessage());
+            String rawMsg = ex.getMessage();
+            String msg = rawMsg;
+            if (msg != null && msg.length() > 160) {
+                msg = msg.substring(0, 160) + "..."; // 避免过长
+            }
+            logger.error("采集失败 device={} error={}:{}", device.getName(), ex.getClass().getSimpleName(), msg);
+            if (rawMsg != null && rawMsg.contains("Bad_TooManySessions")) {
+                applyBackoff(device);
+            } else {
+                // Other errors -> invalidate to force reconnect next round
+                invalidateClient(device.getId());
+            }
+        }
+        if (!dataRecords.isEmpty()) {
+            tsFileStorageService.save(dataRecords);
         }
     }
 
-    private void createInfoRecord(String key, Map<String, Object> info) {
-        try {
-            Map<String, Object> wrapper = new LinkedHashMap<>();
-            wrapper.put("type", key);
-            wrapper.putAll(info);
-            String jsonValue = objectMapper.writeValueAsString(wrapper);
-            DataRecord record = new DataRecord();
-            record.setTagId(0L);
-            record.setValue(jsonValue);
-            record.setTimestamp(LocalDateTime.now());
-            dataRecordRepository.save(record);
-        } catch (Exception e) {
-            logger.error("创建信息记录失败: {}", e.getMessage());
-        }
-    }
+
 
     /**
      * 递归浏览指定 Namespace 的节点

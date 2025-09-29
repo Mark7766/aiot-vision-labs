@@ -64,7 +64,7 @@
             </thead>
             <tbody>
             <!-- Safe alternative: use data-* attributes instead of th:onclick -->
-            <tr th:each="tag : ${dev.tags}" class="tag-row" th:attr="data-device-id=${dev.deviceId},data-tag-name=${tag.name}" style="cursor:pointer;border-bottom:1px solid rgba(0,191,255,0.2);">
+            <tr th:each="tag : ${dev.tags}" class="tag-row" th:attr="data-device-id=${dev.deviceId},data-tag-id=${tag.id}" style="cursor:pointer;border-bottom:1px solid rgba(0,191,255,0.2);">
                 <td style="padding:4px;" th:text="${tag.name}"></td>
                 <td style="padding:4px;" th:text="${tag.address}"></td>
                 <td style="padding:4px;font-family:monospace;" th:text="${tag.value}"></td>
@@ -126,9 +126,9 @@
         scope.querySelectorAll('.tag-row').forEach(tr=>{
             tr.addEventListener('click',()=>{
                 const devId = tr.getAttribute('data-device-id');
-                const tagName = tr.getAttribute('data-tag-name');
-                if(devId && tagName){
-                    window.location = '/data/history/' + encodeURIComponent(devId) + '/' + encodeURIComponent(tagName);
+                const tagId = tr.getAttribute('data-tag-id');
+                if(devId && tagId){
+                    window.location = '/data/history/' + encodeURIComponent(devId) + '/' + encodeURIComponent(tagId);
                 }
             }, { once: true });
         });
@@ -201,7 +201,7 @@
             list.forEach(dev=>{
                 const card = document.createElement('div');
                 card.className='card';
-                const rowsHtml = (dev.tags||[]).map(t=>`<tr class='tag-row' data-device-id='${dev.deviceId}' data-tag-name='${encodeURIComponent(t.name)}' style='cursor:pointer;border-bottom:1px solid rgba(0,191,255,0.2);'>\n<td style='padding:4px;'>${t.name}</td>\n<td style='padding:4px;'>${t.address||''}</td>\n<td style='padding:4px;font-family:monospace;'>${t.value||''}</td></tr>`).join('');
+                const rowsHtml = (dev.tags||[]).map(t=>`<tr class='tag-row' data-device-id='${dev.deviceId}' data-tag-id='${t.id??''}' style='cursor:pointer;border-bottom:1px solid rgba(0,191,255,0.2);'>\n<td style='padding:4px;'>${t.name}</td>\n<td style='padding:4px;'>${t.address||''}</td>\n<td style='padding:4px;font-family:monospace;'>${t.value||''}</td></tr>`).join('');
                 card.innerHTML = `
 <h3>${dev.deviceName} (ID:${dev.deviceId})</h3>
 <p style="margin:0.3rem 0;font-size:0.85rem;">协议: ${dev.protocol||''} | 最新时间: <strong>${dev.timestamp||''}</strong></p>
