@@ -46,6 +46,12 @@
 			<artifactId>tsfile</artifactId>
 			<version>1.3.2</version>
 		</dependency>
+		<!-- 添加 IoTDB Server 依赖，支持嵌入式模式和 SQL 查询 -->
+		<dependency>
+			<groupId>org.apache.iotdb</groupId>
+			<artifactId>iotdb-server</artifactId>
+			<version>1.3.2</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>

@@ -23,6 +23,7 @@ import org.apache.iotdb.tsfile.write.record.datapoint.DataPoint;
 import org.apache.iotdb.tsfile.write.schema.MeasurementSchema;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
@@ -30,7 +31,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.List;
 
 import static com.sandy.aiot.vision.collector.Constant.*;
 
@@ -57,10 +57,9 @@ public class EmbeddedIoTDBDemo {
                 schemas.add(new MeasurementSchema(Constant.SENSOR_7, TSDataType.TEXT, TSEncoding.PLAIN));
                 // register timeseries
                 tsFileWriter.registerTimeseries(new Path(DEVICE_1), schemas);
-                // 初始化 startTime 为 2025-09-01 00:00:00 的时间戳
-                LocalDateTime dateTime = LocalDateTime.of(2025, 9, 1, 0, 0, 0);
-                long startTime = dateTime.toInstant(ZoneOffset.ofHours(8)).toEpochMilli(); // 东八区
-                write(tsFileWriter, DEVICE_1, schemas, 100, startTime, 0);
+                long rowsize=60*10;
+                long startTime = System.currentTimeMillis();
+                write(tsFileWriter, DEVICE_1, schemas, rowsize, startTime, 0);
             }
         } catch (Exception e) {
             log.error("TsFileWriteWithTSRecord meet error", e);
@@ -95,46 +94,6 @@ public class EmbeddedIoTDBDemo {
     }
 
     @Test
-    public void testRead() throws IOException {
-        // file path
-        String path = "test.tsfile";
-
-        // create reader and get the readTsFile interface
-        try (TsFileSequenceReader reader = new TsFileSequenceReader(path);
-             TsFileReader readTsFile = new TsFileReader(reader)) {
-            ArrayList<Path> paths = new ArrayList<>();
-            paths.add(new Path(DEVICE_1, SENSOR_1, true));
-            paths.add(new Path(DEVICE_1, SENSOR_2, true));
-            paths.add(new Path(DEVICE_1, SENSOR_3, true));
-            paths.add(new Path(DEVICE_1, SENSOR_4, true));
-            paths.add(new Path(DEVICE_1, SENSOR_5, true));
-            paths.add(new Path(DEVICE_1, SENSOR_6, true));
-            paths.add(new Path(DEVICE_1, SENSOR_7, true));
-            // use these paths(all measurements) for all the queries
-//            getAll(readTsFile,paths);
-
-            // time filter : 4 <= time <= 10, should select 4 6 7 8
-//            getByTimeFilter(readTsFile, paths);
-
-//            // value filter : device_1.sensor_2 <= 20, should select 1 2 4 6 7
-//            IExpression valueFilter =
-//                    new SingleSeriesExpression(
-//                            new Path(DEVICE_1, SENSOR_2, true), ValueFilterApi.ltEq(20));
-//            queryAndPrint(paths, readTsFile, valueFilter);
-//
-//            // time filter : 4 <= time <= 10, value filter : device_1.sensor_3 >= 20, should select 4 7 8
-//            timeFilter =
-//                    BinaryExpression.and(
-//                            new GlobalTimeExpression(TimeFilterApi.gtEq(4L)),
-//                            new GlobalTimeExpression(TimeFilterApi.ltEq(10L)));
-//            valueFilter =
-//                    new SingleSeriesExpression(
-//                            new Path(DEVICE_1, SENSOR_3, true), ValueFilterApi.gtEq(2));
-//            IExpression finalFilter = BinaryExpression.and(timeFilter, valueFilter);
-//            queryAndPrint(paths, readTsFile, finalFilter);
-        }
-    }
-    @Test
     public void getTimeAndValueFilter() throws IOException {
         // file path
         String path = "test.tsfile";
@@ -162,6 +121,32 @@ public class EmbeddedIoTDBDemo {
         } catch (Exception e) {
             log.error("TsFileWriteWithTSRecord meet error", e);
         }
+    }
+    @Test
+    public void getByLimitFilter() throws IOException {
+
+        String path = "test.tsfile";
+        try (TsFileSequenceReader reader = new TsFileSequenceReader(path);
+             TsFileReader readTsFile = new TsFileReader(reader)) {
+            ArrayList<Path> paths = new ArrayList<>();
+            paths.add(new Path(DEVICE_1, SENSOR_1, true));
+            paths.add(new Path(DEVICE_1, SENSOR_2, true));
+            paths.add(new Path(DEVICE_1, SENSOR_3, true));
+            paths.add(new Path(DEVICE_1, SENSOR_4, true));
+            paths.add(new Path(DEVICE_1, SENSOR_5, true));
+            paths.add(new Path(DEVICE_1, SENSOR_6, true));
+            paths.add(new Path(DEVICE_1, SENSOR_7, true));
+            int limit = 60;
+            long dateTimeLong = System.currentTimeMillis(); // 东八区
+            IExpression timeFilter =
+                    BinaryExpression.and(
+                            new GlobalTimeExpression(TimeFilterApi.gtEq(dateTimeLong - 1000 * limit)),
+                            new GlobalTimeExpression(TimeFilterApi.ltEq(dateTimeLong)));
+            queryAndPrint(paths, readTsFile, timeFilter);
+        } catch (Exception e) {
+            log.error("TsFileWriteWithTSRecord meet error", e);
+        }
+
     }
     @Test
     public void getByTimeFilter() throws IOException {
@@ -236,12 +221,21 @@ public class EmbeddedIoTDBDemo {
 
     private static void queryAndPrint(
             ArrayList<Path> paths, TsFileReader readTsFile, IExpression statement) throws IOException {
+       queryAndPrint(paths,readTsFile,statement, null);
+    }
+    private static void queryAndPrint(
+            ArrayList<Path> paths, TsFileReader readTsFile, IExpression statement,Integer limit) throws IOException {
         QueryExpression queryExpression = QueryExpression.create(paths, statement);
         QueryDataSet queryDataSet = readTsFile.query(queryExpression);
+        int index = 1;
         while (queryDataSet.hasNext()) {
             RowRecord d = queryDataSet.next();
             String next = d.toString();
-            log.info(next);
+            log.info("{}: {}",index,next);
+            if(limit!=null && index==limit.intValue()){
+                break;
+            }
+            index++;
         }
         log.info("----------------");
     }
