@@ -9,7 +9,6 @@ import com.sandy.aiot.vision.collector.repository.DeviceRepository;
 import com.sandy.aiot.vision.collector.repository.TagRepository;
 import com.sandy.aiot.vision.collector.vo.TagValueVO;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.iotdb.tsfile.exception.write.WriteProcessException;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
 import org.eclipse.milo.opcua.sdk.client.api.UaClient;
 import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
@@ -55,7 +54,7 @@ public class CollectorService {
     @Autowired
     private TagRepository tagRepository; // 保留，后续可能单点读取用
     @Autowired
-    private TsFileStorageService tsFileStorageService;
+    private DataStorageService dataStorageService;
     // Cache for reusing OPC UA sessions to avoid TooManySessions burst
     private final Map<Long, OpcUaClient> opcUaClients = new ConcurrentHashMap<>();
     // Backoff map: deviceId -> epochMilli until which collection is skipped
@@ -206,7 +205,7 @@ public class CollectorService {
                 continue;
             }
             String conn = device.getConnectionString();
-            boolean isOpcUa = conn != null && conn.startsWith("opcua:tcp://");
+            boolean isOpcUa = conn != null && conn.startsWith("opc");
             if (isOpcUa) {
                 log.info("开始采集 OPC UA 设备: {} , tags count: {}", device.getName(), tags.size());
                 doOpcUaCollect(device, tags);
@@ -216,7 +215,7 @@ public class CollectorService {
         }
     }
 
-    private void doOpcUaCollect(Device device, List<Tag> tags) throws IOException, WriteProcessException {
+    private void doOpcUaCollect(Device device, List<Tag> tags)  {
         List<DataRecord> dataRecords = new ArrayList<>();
         OpcUaClient client = null;
         try {
@@ -270,7 +269,7 @@ public class CollectorService {
             }
         }
         if (!dataRecords.isEmpty()) {
-            tsFileStorageService.save(dataRecords);
+            dataStorageService.save(dataRecords);
         }
     }
 

@@ -1,6 +1,5 @@
 package com.sandy.aiot.vision.collector.controller;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sandy.aiot.vision.collector.entity.DataRecord;
 import com.sandy.aiot.vision.collector.entity.Device;
@@ -8,8 +7,8 @@ import com.sandy.aiot.vision.collector.entity.Tag;
 import com.sandy.aiot.vision.collector.repository.DeviceRepository;
 import com.sandy.aiot.vision.collector.repository.TagRepository;
 import com.sandy.aiot.vision.collector.service.CollectorService;
+import com.sandy.aiot.vision.collector.service.DataStorageService;
 import com.sandy.aiot.vision.collector.service.PredictService;
-import com.sandy.aiot.vision.collector.service.TsFileStorageService;
 import com.sandy.aiot.vision.collector.vo.NamespaceVO;
 import com.sandy.aiot.vision.collector.vo.TagValueVO;
 import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelRsp;
@@ -24,7 +23,6 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/data")
@@ -41,7 +39,7 @@ public class DataController {
     @Autowired
     private PredictService predictService;
     @Autowired
-    private TsFileStorageService tsFileStorageService;
+    private DataStorageService dataStorageService;
 
     private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -87,7 +85,7 @@ public class DataController {
         }
         Tag tag = tagOpt.get();
         // 直接按最近 minutes 分钟获取该测点数据（服务内已按时间倒序）
-        List<DataRecord> history = tsFileStorageService.findTopN(deviceId, tagId, minutes);
+        List<DataRecord> history = dataStorageService.findTopN(deviceId, tagId, minutes);
         List<TagHistoryEntry> entries = new ArrayList<>();
         for (DataRecord rec : history) {
             TagHistoryEntry e = new TagHistoryEntry();
@@ -118,7 +116,7 @@ public class DataController {
     @GetMapping(value = "/api/history/{deviceId}/{tagId}", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     public List<TagHistoryEntry> apiTagHistory(@PathVariable Long deviceId, @PathVariable Long tagId){
-        List<DataRecord> history = tsFileStorageService.findTopN(deviceId, tagId,10);
+        List<DataRecord> history = dataStorageService.findTopN(deviceId, tagId,200);
         List<TagHistoryEntry> list = new ArrayList<>();
         for (DataRecord rec : history) {
             TagHistoryEntry e = new TagHistoryEntry();
@@ -191,22 +189,8 @@ public class DataController {
                     tv.setId(t.getId());
                     tv.setName(t.getName());
                     tv.setAddress(t.getAddress());
-                    try {
-                        List<DataRecord> recs = tsFileStorageService.findTopN(d.getId(), t.getId(), minutesWindow);
-                        if(!recs.isEmpty()){
-                            DataRecord latest = recs.get(0); // 已倒序
-                            if(latest.getTimestamp()!=null && (latestTs==null || latest.getTimestamp().isAfter(latestTs))){
-                                latestTs = latest.getTimestamp();
-                            }
-                            Object val = latest.getValue();
-                            tv.setValue(val==null?"":String.valueOf(val));
-                        } else {
-                            tv.setValue("");
-                        }
-                    } catch (Exception e){
-                        log.warn("获取最新值失败 deviceId={} tagId={} err={}", d.getId(), t.getId(), e.getMessage());
-                        tv.setValue("");
-                    }
+                    Optional<DataRecord> dataRecord = dataStorageService.findLatest(d.getId(), t.getId());
+                    tv.setValue(dataRecord.isEmpty()?"":String.valueOf(dataRecord.get().getValue()));
                     view.getTags().add(tv);
                 }
             }

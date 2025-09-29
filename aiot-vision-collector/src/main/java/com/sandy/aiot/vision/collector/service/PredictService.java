@@ -29,11 +29,11 @@ public class PredictService {
     @Autowired
     private DeviceRepository deviceRepository;
     @Autowired
-    private TsFileStorageService tsFileStorageService;
+    private DataStorageService dataStorageService;
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Value("${predict.api.url:http://localhost:5000/predict}")
+    @Value("${predict.api.url:http://localhost:50000/predict}")
     private String predictApiUrl;
     @Value("${predict.api.prediction-length:60}")
     private int defaultPredictionLength;
@@ -46,11 +46,11 @@ public class PredictService {
             throw new RuntimeException("Device[deviceId=" + deviceId + "] not found");
         }
         // 替换为 TsFile 读取
-        List<DataRecord> dataRecords = tsFileStorageService.findTopN(deviceId, tagId,3);
+        List<DataRecord> dataRecords = dataStorageService.findTopN(deviceId, tagId,200);
         List<Float> recentValues = new ArrayList<>();
         List<LocalDateTime> recentTimestamps = new ArrayList<>();
         for (DataRecord dataRecord : dataRecords) {
-                recentValues.add(Float.valueOf((String)dataRecord.getValue()));
+                recentValues.add((Float)dataRecord.getValue());
                 recentTimestamps.add(dataRecord.getTimestamp());
         }
         Collections.reverse(recentValues); // 升序
@@ -169,17 +169,4 @@ public class PredictService {
         return fb;
     }
 
-    private Map<String, Object> parseRecordValue(DataRecord record) {
-        if (record == null || record.getValue() == null) return Collections.emptyMap();
-        try { return objectMapper.readValue(record.getValue(), new TypeReference<>() {}); }
-        catch (Exception e) { log.warn("解析数据失败 id={} err={}", record.getId(), e.getMessage()); return Collections.emptyMap(); }
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> extractDataMap(Map<String, Object> parsed) {
-        if (parsed == null) return null;
-        Object data = parsed.get("data");
-        if (data instanceof Map) { return (Map<String, Object>) data; }
-        return null;
-    }
 }

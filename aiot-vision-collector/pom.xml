@@ -39,16 +39,11 @@
 			<artifactId>lombok</artifactId>
 			<version>1.18.40</version>
 		</dependency>
-		<!-- TsFile for time-series snapshot storage -->
+
 		<dependency>
 			<groupId>org.apache.iotdb</groupId>
-			<artifactId>tsfile</artifactId>
-			<version>1.3.2</version>
-		</dependency>
-		<dependency>
-			<groupId>org.antlr</groupId>
-			<artifactId>antlr4-runtime</artifactId>
-			<version>4.13.1</version>
+			<artifactId>iotdb-session</artifactId>
+			<version>2.0.5</version>
 		</dependency>
 		<!-- ONNX runtime kept for NB 预测 -->
 		<dependency>
