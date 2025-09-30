@@ -21,7 +21,6 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -50,7 +49,7 @@ public class PredictService {
         List<Float> recentValues = new ArrayList<>();
         List<LocalDateTime> recentTimestamps = new ArrayList<>();
         for (DataRecord dataRecord : dataRecords) {
-                recentValues.add((Float)dataRecord.getValue());
+                recentValues.add(toFloat(dataRecord.getValue()));
                 recentTimestamps.add(dataRecord.getTimestamp());
         }
         Collections.reverse(recentValues); // 升序
@@ -61,6 +60,80 @@ public class PredictService {
         vo.setTimestamps(recentTimestamps); // 仅内部保留
         vo.setPredictionPoints(points);
         return vo;
+    }
+
+    private Float toFloat(Object value) {
+        // 返回 Float.NaN 表示无法解析或缺失，避免 NullPointer
+        if (value == null) return Float.NaN;
+        if (value instanceof Float f) {
+            return normalizeFloat(f);
+        }
+        if (value instanceof Number n) {
+            return normalizeFloat(n.floatValue());
+        }
+        if (value instanceof Boolean b) {
+            return b ? 1.0f : 0.0f;
+        }
+        if (value instanceof CharSequence cs) {
+            String s = cs.toString().trim();
+            if (s.isEmpty()) return Float.NaN;
+            // 去掉常见分隔符/百分号/尾随单位（简单处理）
+            String cleaned = s.replace(",", "");
+            if (cleaned.endsWith("%")) {
+                String pct = cleaned.substring(0, cleaned.length()-1);
+                try { return normalizeFloat(Float.parseFloat(pct) / 100f); } catch (NumberFormatException ignored) { return Float.NaN; }
+            }
+            // 尝试直接解析
+            try {
+                return normalizeFloat(Float.parseFloat(cleaned));
+            } catch (NumberFormatException e) {
+                // 尝试提取开头的数字 (例如 "123.45abc")
+                int i = 0; boolean dotSeen = false; boolean signSeen = false;
+                while (i < cleaned.length()) {
+                    char c = cleaned.charAt(i);
+                    if ((c >= '0' && c <= '9') || (!dotSeen && c == '.') || (!signSeen && (c=='+'||c=='-'))) {
+                        if (c=='.') dotSeen = true; if (c=='+'||c=='-') signSeen = true;
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+                if (i > 0) {
+                    try { return normalizeFloat(Float.parseFloat(cleaned.substring(0, i))); } catch (NumberFormatException ignored) { }
+                }
+                log.debug("无法解析字符串为浮点数: '{}'", s);
+                return Float.NaN;
+            }
+        }
+        // 如果是集合，取第一个非空元素尝试
+        if (value instanceof Collection<?> col) {
+            for (Object v : col) {
+                if (v != null) return toFloat(v);
+            }
+            return Float.NaN;
+        }
+        // 如果是数组，读取第一个元素
+        if (value.getClass().isArray()) {
+            int len = java.lang.reflect.Array.getLength(value);
+            if (len > 0) {
+                Object first = java.lang.reflect.Array.get(value, 0);
+                return toFloat(first);
+            }
+            return Float.NaN;
+        }
+        // 回退使用 toString()
+        try {
+            return normalizeFloat(Float.parseFloat(value.toString().trim()));
+        } catch (Exception e) {
+            log.debug("无法将对象转换为Float: type={} value={}", value.getClass().getName(), value);
+            return Float.NaN;
+        }
+    }
+
+    private Float normalizeFloat(Float f) {
+        if (f == null) return Float.NaN;
+        if (Float.isInfinite(f) || Float.isNaN(f)) return Float.NaN;
+        return f;
     }
 
     private List<PredictionPoint> buildPredictionPoints(List<LocalDateTime> recentTs, List<Float> predictions){

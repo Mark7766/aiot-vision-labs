@@ -47,6 +47,7 @@ public class DeviceController {
         return "redirect:/devices";
     }
 
+    // ---------------- Tag CRUD ----------------
     @GetMapping("/{deviceId}/tags/add")
     public String addTagForm(@PathVariable Long deviceId, Model model) {
         Tag tag = Tag.builder().build();
@@ -60,6 +61,54 @@ public class DeviceController {
     public String saveTag(@PathVariable Long deviceId, @ModelAttribute Tag tag) {
         tag.setDevice(dataService.getDeviceById(deviceId));
         dataService.saveTag(tag);
+        return "redirect:/devices";
+    }
+
+    @GetMapping("/{deviceId}/tags/edit/{tagId}")
+    public String editTagForm(@PathVariable Long deviceId, @PathVariable Long tagId, Model model) {
+        Device device = dataService.getDeviceById(deviceId);
+        if (device == null) {
+            return "redirect:/devices";
+        }
+        Tag existing = dataService.getTagsByDeviceId(deviceId).stream()
+                .filter(t -> t.getId().equals(tagId))
+                .findFirst().orElse(null);
+        if (existing == null) {
+            return "redirect:/devices";
+        }
+        model.addAttribute("tag", existing);
+        model.addAttribute("deviceId", deviceId);
+        return "tag-form";
+    }
+
+    @PostMapping("/{deviceId}/tags/{tagId}")
+    public String updateTag(@PathVariable Long deviceId, @PathVariable Long tagId, @ModelAttribute Tag form) {
+        Device device = dataService.getDeviceById(deviceId);
+        if (device == null) {
+            return "redirect:/devices";
+        }
+        Tag existing = dataService.getTagsByDeviceId(deviceId).stream()
+                .filter(t -> t.getId().equals(tagId))
+                .findFirst().orElse(null);
+        if (existing == null) {
+            return "redirect:/devices";
+        }
+        existing.setName(form.getName());
+        existing.setAddress(form.getAddress());
+        existing.setDevice(device);
+        dataService.saveTag(existing);
+        return "redirect:/devices";
+    }
+
+    @PostMapping("/{deviceId}/tags/delete/{tagId}")
+    public String deleteTag(@PathVariable Long deviceId, @PathVariable Long tagId) {
+        // 简单校验: 确认 tag 属于该设备
+        Tag existing = dataService.getTagsByDeviceId(deviceId).stream()
+                .filter(t -> t.getId().equals(tagId))
+                .findFirst().orElse(null);
+        if (existing != null) {
+            dataService.deleteTag(tagId);
+        }
         return "redirect:/devices";
     }
 }

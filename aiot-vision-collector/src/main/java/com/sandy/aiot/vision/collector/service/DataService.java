@@ -27,6 +27,10 @@ public class DataService {
         return tagRepository.findByDeviceId(deviceId); // 自定义查询方法需添加
     }
 
+    public Tag getTagById(Long tagId) {
+        return tagRepository.findById(tagId).orElse(null);
+    }
+
     public Device saveDevice(Device device) {
         return deviceRepository.save(device);
     }

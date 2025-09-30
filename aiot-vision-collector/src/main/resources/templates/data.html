@@ -36,6 +36,12 @@
 .ns-status{font-size:.7rem;color:#7fdcff;display:flex;gap:.75rem;align-items:center;}
 .close-btn{background:#123;color:#eee;border:1px solid #00bfff;cursor:pointer;padding:.35rem .8rem;font-size:.75rem;border-radius:4px;}
 .close-btn:hover{background:#004055;}
+.add-btn{background:#004d66;color:#fff;border:1px solid #00bfff;padding:2px 6px;font-size:.65rem;cursor:pointer;border-radius:3px;}
+.add-btn[disabled]{opacity:.5;cursor:default;}
+.add-btn:hover:not([disabled]){background:#00638a;}
+.action-cell{white-space:nowrap;}
+.msg-ok{color:#59d885;}
+.msg-err{color:#ff6b6b;}
 @media (max-width:820px){.ns-columns{flex-direction:column;}.ns-left{flex:0 0 auto;max-height:200px;}.ns-right{max-height:300px;}}
 </style>
 
@@ -94,13 +100,13 @@
             </div>
             <div class="ns-right">
                 <div class="ns-tags-head">
-                    <div style="font-weight:600;">Namespace 下 Tags</div>
+                    <div style="font-weight:600;">Namespace 下 Tags (点击添加)</div>
                     <div class="ns-status" id="nsStatus"></div>
                 </div>
                 <div class="ns-tags-container">
                     <table>
-                        <thead><tr><th style="width:30%;">名称</th><th style="width:40%;">地址</th><th style="width:30%;">值</th></tr></thead>
-                        <tbody id="nsTagBody"><tr><td colspan="3" class="ns-empty">请选择左侧 Namespace</td></tr></tbody>
+                        <thead><tr><th style="width:25%;">名称</th><th style="width:35%;">地址</th><th style="width:20%;">值</th><th style="width:20%;">操作</th></tr></thead>
+                        <tbody id="nsTagBody"><tr><td colspan="4" class="ns-empty">请选择左侧 Namespace</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -143,7 +149,7 @@
         modal.style.display='flex';
         const ul = document.getElementById('nsList');
         ul.innerHTML = '<li class="ns-item" style="cursor:default;opacity:.7;">加载中...</li>';
-        document.getElementById('nsTagBody').innerHTML = '<tr><td colspan="3" class="ns-empty">请选择左侧 Namespace</td></tr>';
+        document.getElementById('nsTagBody').innerHTML = '<tr><td colspan="4" class="ns-empty">请选择左侧 Namespace</td></tr>';
         document.getElementById('nsStatus').textContent = '';
         document.getElementById('nsSelectedLabel').textContent = '';
         fetch(`/data/api/${deviceId}/namespaces`).then(r=>r.json()).then(list=>{
@@ -169,25 +175,69 @@
     // 支持 ESC 关闭
     document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeNsModal(); }});
 
+    function escHtml(str){
+        if(str==null) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
     function loadNamespaceTags(deviceId, nsIndex, li, uri){
         // 高亮
         document.querySelectorAll('#nsList .ns-item').forEach(x=>x.classList.remove('active'));
         li.classList.add('active');
         document.getElementById('nsSelectedLabel').textContent = `已选: #${nsIndex}${uri?(' '+uri):''}`;
         const body = document.getElementById('nsTagBody');
-        body.innerHTML = `<tr><td colspan='3' class='ns-empty'>加载中...</td></tr>`;
+        body.innerHTML = `<tr><td colspan='4' class='ns-empty'>加载中...</td></tr>`;
         fetch(`/data/api/${deviceId}/namespaces/${nsIndex}/tags`).then(r=>r.json()).then(tags=>{
             if(!tags || tags.length===0){
-                body.innerHTML = `<tr><td colspan='3' class='ns-empty'>无数据</td></tr>`;
+                body.innerHTML = `<tr><td colspan='4' class='ns-empty'>无数据</td></tr>`;
                 document.getElementById('nsStatus').textContent = '';
                 return;
             }
-            body.innerHTML = tags.map(t=>`<tr><td>${t.name||''}</td><td>${t.address||''}</td><td>${(t.value===null||t.value===undefined)?'':t.value}</td></tr>`).join('');
+            body.innerHTML = tags.map(t=>{
+                const nm = escHtml(t.name||'');
+                const addr = escHtml(t.address||'');
+                const val = (t.value===null||t.value===undefined)?'':escHtml(t.value);
+                return `<tr><td>${nm}</td><td>${addr}</td><td>${val}</td><td class='action-cell'><button type='button' class='add-btn' onclick='quickAddTag(${deviceId},"${nm.replace(/"/g,'&quot;')}","${addr.replace(/"/g,'&quot;')}",this)'>添加</button></td></tr>`;
+            }).join('');
             document.getElementById('nsStatus').textContent = `已加载 ${tags.length} 条`;
         }).catch(err=>{
-            body.innerHTML = `<tr><td colspan='3' class='ns-empty' style='color:#ff4d4f;'>加载失败 ${err}</td></tr>`;
+            body.innerHTML = `<tr><td colspan='4' class='ns-empty' style='color:#ff4d4f;'>加载失败 ${err}</td></tr>`;
             document.getElementById('nsStatus').textContent = '';
         });
+    }
+
+    function quickAddTag(deviceId, name, address, btn){
+        if(!btn || btn.disabled) return;
+        btn.disabled = true;
+        const originText = btn.textContent;
+        btn.textContent = '添加中...';
+        fetch(`/data/api/${deviceId}/tags`,{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({name:name,address:address})
+        }).then(r=>r.json()).then(resp=>{
+            if(resp.success){
+                btn.textContent='已添加';
+                btn.classList.add('added');
+                showNsMessage('添加成功: '+ (resp.name||name), true);
+                // 刷新主卡片(如果开启自动刷新则等待定时器; 否则手动刷新一次)
+                fetchAndRender();
+            } else {
+                btn.textContent= originText;
+                btn.disabled = false;
+                showNsMessage('失败: '+resp.message, false);
+            }
+        }).catch(err=>{
+            btn.textContent= originText;
+            btn.disabled = false;
+            showNsMessage('异常: '+err, false);
+        });
+    }
+
+    function showNsMessage(msg, ok){
+        const status = document.getElementById('nsStatus');
+        status.innerHTML = `<span class='${ok?'msg-ok':'msg-err'}'>${msg}</span>`;
+        setTimeout(()=>{ if(status.innerHTML.includes(msg)) status.innerHTML=''; }, 4000);
     }
 
     function fetchAndRender(){

@@ -12,10 +12,12 @@ import com.sandy.aiot.vision.collector.service.PredictService;
 import com.sandy.aiot.vision.collector.vo.NamespaceVO;
 import com.sandy.aiot.vision.collector.vo.TagValueVO;
 import com.sandy.aiot.vision.collector.vo.TimeSeriesDataModelRsp;
+import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -170,6 +172,32 @@ public class DataController {
         }
     }
 
+    // 新增：从 Namespace UI 快速添加标签到设备（避免刷新页面）
+    @PostMapping(value = "/api/{deviceId}/tags", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<TagAddResp> apiQuickAddTag(@PathVariable Long deviceId, @RequestBody TagAddReq req){
+        Optional<Device> devOpt = deviceRepository.findById(deviceId);
+        if(devOpt.isEmpty()){
+            return ResponseEntity.ok(TagAddResp.builder().success(false).message("设备不存在").build());
+        }
+        String address = req.getAddress()==null?"":req.getAddress().trim();
+        if(address.isEmpty()){
+            return ResponseEntity.ok(TagAddResp.builder().success(false).message("地址不能为空").build());
+        }
+        // 去重：同一设备同一地址不重复添加
+        if(tagRepository.findByDeviceIdAndAddress(deviceId, address).isPresent()){
+            return ResponseEntity.ok(TagAddResp.builder().success(false).message("已存在该地址的点位").build());
+        }
+        String name = (req.getName()==null||req.getName().trim().isEmpty()) ? address : req.getName().trim();
+        Tag tag = Tag.builder().name(name).address(address).device(devOpt.get()).build();
+        try {
+            tag = tagRepository.save(tag);
+            return ResponseEntity.ok(TagAddResp.builder().success(true).message("添加成功").id(tag.getId()).name(tag.getName()).address(tag.getAddress()).build());
+        } catch (Exception e){
+            log.error("快速添加点位失败 deviceId={} address={} err={}", deviceId, address, e.getMessage());
+            return ResponseEntity.ok(TagAddResp.builder().success(false).message("保存失败:"+e.getMessage()).build());
+        }
+    }
+
     // 聚合方法：按设备/标签获取最近 minutesWindow 分钟内最新值
     private List<DeviceSnapshotView> buildLatestSnapshots(int minutesWindow){
         List<Device> devices = deviceRepository.findAllWithTags();
@@ -224,5 +252,21 @@ public class DataController {
     public static class TagHistoryEntry {
         private String timestamp;
         private String value;
+    }
+
+    @Data
+    public static class TagAddReq {
+        private String name;
+        private String address;
+    }
+
+    @Data
+    @Builder
+    public static class TagAddResp {
+        private boolean success;
+        private String message;
+        private Long id;
+        private String name;
+        private String address;
     }
 }
