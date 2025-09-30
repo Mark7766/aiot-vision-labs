@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
 import org.eclipse.milo.opcua.sdk.client.api.UaClient;
 import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
+import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
 import org.eclipse.milo.opcua.stack.core.NamespaceTable;
 import org.eclipse.milo.opcua.stack.core.UaException;
@@ -22,11 +23,10 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UShort;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.BrowseDirection;
+import org.eclipse.milo.opcua.stack.core.types.enumerated.MonitoringMode;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn;
-import org.eclipse.milo.opcua.stack.core.types.structured.BrowseDescription;
-import org.eclipse.milo.opcua.stack.core.types.structured.BrowseResult;
-import org.eclipse.milo.opcua.stack.core.types.structured.ReferenceDescription;
+import org.eclipse.milo.opcua.stack.core.types.structured.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,19 +35,19 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @Slf4j
-public class CollectorService {
-    private static final Logger logger = LoggerFactory.getLogger(CollectorService.class);
-    private final ObjectMapper objectMapper = new ObjectMapper();
+public class CollectorServiceBySub {
+    private static final Logger logger = LoggerFactory.getLogger(CollectorServiceBySub.class);
+    private static AtomicInteger atomic = new AtomicInteger(1);
 
     @Autowired
     private DeviceRepository deviceRepository;
@@ -61,7 +61,8 @@ public class CollectorService {
     private final Map<Long, Long> deviceBackoffUntil = new ConcurrentHashMap<>();
 
     private static final long TOO_MANY_SESSIONS_BACKOFF_MS = TimeUnit.SECONDS.toMillis(30);
-
+    //<NodeId,tag>
+    private static final Map<NodeId,Tag> nodeIdTagMap = new HashMap<>();
     @PreDestroy
     public void shutdown() {
         opcUaClients.forEach((id, c) -> {
@@ -117,9 +118,107 @@ public class CollectorService {
 
     @Scheduled(fixedRate = 1000)
     public void collectData() { // removed @Transactional to prevent batch rollback
-        doCollect();
+        doSub();
     }
 
+    private void doSub() {
+        List<Device> devices = deviceRepository.findAllWithTags();
+        if (devices.isEmpty()) {
+            log.info("尚未配置设备，前往 /devices 添加");
+            return;
+        }
+        for (Device device : devices) {
+            if (isInBackoff(device)) {
+                log.debug("跳过设备 {} 采集（会话回退中）", device.getName());
+                continue;
+            }
+            List<Tag> tags = device.getTags();
+            if (tags == null || tags.isEmpty()) {
+                log.warn("设备 {} 未配置点位，跳过采集", device.getName());
+                continue;
+            }
+            String conn = device.getConnectionString();
+            boolean isOpcUa = conn != null && conn.startsWith("opc");
+            if (isOpcUa) {
+                log.info("开始采集 OPC UA 设备: {} , tags count: {}", device.getName(), tags.size());
+                doSubOpcUaCollect(device, tags);
+            } else {
+                log.warn("不支持的设备类型，跳过采集 Device={} ConnectionString={}", device.getName(), conn);
+            }
+        }
+
+    }
+
+    private void doSubOpcUaCollect(Device device, List<Tag> tags) {
+        OpcUaClient client = null;
+        try {
+            client = getOrCreateClient(device);
+            List<NodeId> nodeIds = new ArrayList<>();
+            for (Tag tag : tags) {
+                try {
+                    NodeId nodeId  =NodeId.parse(tag.getAddress());
+                    if(!nodeIdTagMap.containsKey(nodeId)){
+                        nodeIds.add(nodeId);
+                        nodeIdTagMap.put(nodeId,tag);
+                    }
+                } catch (Exception parseEx) {
+                    log.warn("解析地址失败 device={} tag={} addr={} err={}", device.getName(), tag.getName(), tag.getAddress(), parseEx.getMessage());
+                }
+            }
+            if (nodeIds.isEmpty()) {
+                //打印日志
+                log.info("设备 {} 无新增订阅点位，跳过订阅", device.getName());
+                return;
+            }
+            client.getSubscriptionManager()
+                    .createSubscription(1000.0)
+                    .thenAccept(t -> {
+                        //节点
+                        List<MonitoredItemCreateRequest> requests = new ArrayList<>();
+                        for (NodeId nodeId:nodeIds) {
+                            if(!nodeIdTagMap.containsKey(nodeId)){
+                                requests.add(getMonitoredItemCreateRequest(nodeId));
+                            }
+                        }
+                        //创建监控项，并且注册变量值改变时候的回调函数。
+                        t.createMonitoredItems(
+                                TimestampsToReturn.Both,
+                                requests,
+                                (item, id) -> item.setValueConsumer((it, val) -> {
+                                    log.info("nodeid :{}, value :{}", it.getReadValueId().getNodeId(), val.getValue().getValue());
+                                    DataRecord dataRecord = DataRecord.builder()
+                                            .deviceId(nodeIdTagMap.get(it.getReadValueId().getNodeId()).getDevice().getId())
+                                            .tagId(nodeIdTagMap.get(it.getReadValueId().getNodeId()).getId())
+                                            .value(val.getValue().getValue())
+                                            .timestamp(LocalDateTime.now())
+                                            .build();
+                                    dataStorageService.save(List.of(dataRecord));
+                                })
+                        );
+                    }).get();
+        } catch (Exception ex) {
+            String rawMsg = ex.getMessage();
+            String msg = rawMsg;
+            if (msg != null && msg.length() > 160) {
+                msg = msg.substring(0, 160) + "..."; // 避免过长
+            }
+            logger.error("采集失败 device={} error={}:{}", device.getName(), ex.getClass().getSimpleName(), msg);
+            if (rawMsg != null && rawMsg.contains("Bad_TooManySessions")) {
+                applyBackoff(device);
+            } else {
+                // Other errors -> invalidate to force reconnect next round
+                invalidateClient(device.getId());
+            }
+        }
+    }
+    private static MonitoredItemCreateRequest getMonitoredItemCreateRequest(NodeId nodeId) {
+        ReadValueId readValueId = new ReadValueId(nodeId, AttributeId.Value.uid(), null, null);
+        //创建监控的参数
+        MonitoringParameters parameters = new MonitoringParameters(UInteger.valueOf(atomic.getAndIncrement()), 1000.0, null, UInteger.valueOf(10), true);
+        //创建监控项请求
+        //该请求最后用于创建订阅。
+        return  new MonitoredItemCreateRequest(readValueId, MonitoringMode.Reporting, parameters);
+    }
     // 手动触发调用
     public void collectDataOnce() { // removed @Transactional
         doCollect();

@@ -6,7 +6,7 @@ import com.sandy.aiot.vision.collector.entity.Device;
 import com.sandy.aiot.vision.collector.entity.Tag;
 import com.sandy.aiot.vision.collector.repository.DeviceRepository;
 import com.sandy.aiot.vision.collector.repository.TagRepository;
-import com.sandy.aiot.vision.collector.service.CollectorService;
+import com.sandy.aiot.vision.collector.service.CollectorServiceBySub;
 import com.sandy.aiot.vision.collector.service.DataStorageService;
 import com.sandy.aiot.vision.collector.service.PredictService;
 import com.sandy.aiot.vision.collector.vo.NamespaceVO;
@@ -29,7 +29,7 @@ import java.util.*;
 @Slf4j
 public class DataController {
     @Autowired
-    private CollectorService collectorService;
+    private CollectorServiceBySub collectorService;
     @Autowired
     private DeviceRepository deviceRepository;
     @Autowired

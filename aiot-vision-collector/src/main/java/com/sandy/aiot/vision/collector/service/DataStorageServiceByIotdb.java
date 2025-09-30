@@ -31,7 +31,7 @@ public class DataStorageServiceByIotdb implements DataStorageService {
     private Session session;
 
     // Hardcoded for demo; use @Value("${iotdb.host}", etc.) in production
-    private static final String HOST = "127.0.0.1";
+    private static final String HOST = "10.235.229.11";
     private static final int PORT = 6667;
     private static final String USERNAME = "root";
     private static final String PASSWORD = "root";
