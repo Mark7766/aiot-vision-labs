@@ -1,106 +1,265 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(~{::body})}">
 <body>
-<div class="header">
-    <h1>实时设备数据</h1>
-    <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap;">
-        <form th:action="@{/data/collect}" method="post" style="display:inline;">
-            <button type="submit">手动采集一次</button>
-        </form>
-        <button id="autoBtn" type="button" onclick="toggleAuto()">开启自动刷新</button>
-        <span id="lastRefresh" style="align-self:center;font-size:0.9rem;color:#ccc;"></span>
+<div class="dash-toolbar" id="dashToolbar">
+    <div id="deviceCount"></div>
+    <div class="grow"></div>
+    <!-- Auto refresh button -->
+    <button id="autoBtn" type="button" class="btn-icon auto-refresh" onclick="toggleAuto()" title="开启自动刷新" aria-label="开启自动刷新" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v3.6m0-3.6 2.8 2.8M12 4 9.2 6.8M6 12a6 6 0 1 0 6-6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        <span class="visually-hidden">开启自动刷新</span>
+    </button>
+    <!-- Edit mode switch placed beside auto refresh (Apple-like) -->
+    <div id="editModeSwitch" class="edit-switch" role="switch" aria-checked="false" tabindex="0" title="开启编辑模式" aria-label="开启编辑模式" onclick="toggleEditMode()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEditMode();}">
+        <div class="track"><div class="thumb"></div></div>
+        <span id="editModeSr" class="visually-hidden">开启编辑模式</span>
     </div>
+    <span id="autoStatus" class="auto-indicator" style="display:none;" aria-hidden="true">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="label">AUTO</span>
+    </span>
+    <span id="autoLive" class="visually-hidden" aria-live="polite"></span>
+    <span id="lastRefresh" class="text-dim" style="font-size:.6rem;min-width:90px;text-align:right;"></span>
 </div>
 
-<!-- 新增样式：Namespace 浏览弹层优化 -->
-<style>
-/***** Namespace Modal UI *****/
-#namespaceModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:999;align-items:center;justify-content:center;}
-.ns-wrapper{width:90%;max-width:1000px;background:#0b1e2b;border:1px solid #00bfff;border-radius:8px;box-shadow:0 0 12px #00bfff88;padding:1rem 1.2rem 1.1rem;max-height:90%;display:flex;flex-direction:column;gap:.75rem;}
-.ns-header{display:flex;justify-content:space-between;align-items:center;}
-.ns-columns{display:flex;gap:1rem;align-items:stretch;}
-.ns-left{flex:0 0 280px;display:flex;flex-direction:column;max-height:60vh;}
-#nsList{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1;border:1px solid #0f3c52;border-radius:4px;background:#082031;}
-#nsList::-webkit-scrollbar{width:8px;}#nsList::-webkit-scrollbar-thumb{background:#0f4d6d;border-radius:4px;}
-.ns-item{padding:6px 8px;font-size:.8rem;line-height:1.2;border-bottom:1px solid #0f3c52;cursor:pointer;display:flex;gap:.5rem;justify-content:space-between;align-items:center;transition:background .15s;}
-.ns-item:last-child{border-bottom:none;}
-.ns-item:hover{background:#0f3350;}
-.ns-item.active{background:linear-gradient(90deg,#004d66,#00638a);}
-.ns-right{flex:1;display:flex;flex-direction:column;max-height:60vh;min-width:360px;}
-.ns-tags-head{display:flex;justify-content:space-between;align-items:center;font-size:.8rem;margin-bottom:.4rem;color:#7fdcff;}
-.ns-tags-container{flex:1;overflow:auto;border:1px solid #0f3c52;border-radius:4px;background:#082031;}
-.ns-tags-container table{width:100%;border-collapse:collapse;font-size:.75rem;}
-.ns-tags-container thead th{position:sticky;top:0;background:#042335;border-bottom:1px solid #00bfff;padding:6px 6px;font-weight:600;}
-.ns-tags-container tbody td{padding:4px 6px;border-bottom:1px solid rgba(0,191,255,0.08);font-family:monospace;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.ns-empty{padding:8px;font-size:.75rem;color:#999;}
-.ns-status{font-size:.7rem;color:#7fdcff;display:flex;gap:.75rem;align-items:center;}
-.close-btn{background:#123;color:#eee;border:1px solid #00bfff;cursor:pointer;padding:.35rem .8rem;font-size:.75rem;border-radius:4px;}
-.close-btn:hover{background:#004055;}
-.add-btn{background:#004d66;color:#fff;border:1px solid #00bfff;padding:2px 6px;font-size:.65rem;cursor:pointer;border-radius:3px;}
-.add-btn[disabled]{opacity:.5;cursor:default;}
-.add-btn:hover:not([disabled]){background:#00638a;}
-.action-cell{white-space:nowrap;}
-.msg-ok{color:#59d885;}
-.msg-err{color:#ff6b6b;}
-@media (max-width:820px){.ns-columns{flex-direction:column;}.ns-left{flex:0 0 auto;max-height:200px;}.ns-right{max-height:300px;}}
-</style>
-
-<div th:if="${#lists.isEmpty(devices)}" class="card">
-    <h3>暂无设备数据</h3>
-    <p>请前往 设备配置 页面添加设备与标签，或等待定时采集。</p>
+<!-- 空态：无设备时引导通过悬浮按钮添加 -->
+<div th:if="${#lists.isEmpty(devices)}" class="card" id="noDeviceCard" style="max-width:520px;margin:0 auto;">
+    <p class="text-dim" style="margin:.2rem 0 .6rem;font-size:.75rem;">暂无设备。使用右下角 “＋” 添加。</p>
 </div>
-<div class="grid" th:if="${!#lists.isEmpty(devices)}">
-    <div class="card" th:each="dev : ${devices}">
-        <h3 th:text="${dev.deviceName} + ' (ID:' + ${dev.deviceId} + ')'">设备</h3>
-        <p style="margin:0.3rem 0;font-size:0.85rem;">
-            协议: <span th:text="${dev.protocol}"></span>
-            | 连接: <span th:text="${dev.connectionString}"></span>
-            | 最新时间: <strong th:text="${dev.timestamp}"></strong>
-        </p>
-        <div style="margin:0.3rem 0;display:flex;gap:0.5rem;flex-wrap:wrap;">
-            <button type="button" th:attr="data-device-id=${dev.deviceId}" class="ns-btn" onclick="openNamespaces(this.getAttribute('data-device-id'))">查看Namespaces</button>
+
+<div class="grid" th:if="${!#lists.isEmpty(devices)}" id="deviceGridInitial">
+    <!-- 设备卡片初始渲染，后续由 JS 重绘 -->
+    <div class="card" th:each="dev : ${devices}" th:attr="data-device-id=${dev.deviceId},data-device-name=${dev.deviceName},data-device-protocol=${dev.protocol},data-device-conn=${dev.connectionString}">
+        <div style="position:absolute;top:.35rem;right:.35rem;display:flex;gap:.35rem;">
+            <button type="button" class="delete-x btn-icon danger" title="删除设备" aria-label="删除设备" onclick="deleteDevice(this.closest('.card').dataset.deviceId,this);event.stopPropagation();">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M10 7V5h4v2m-7 0v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7M9 11v6M15 11v6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">删除设备</span>
+            </button>
         </div>
-        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+        <div class="device-title" style="display:flex;align-items:center;gap:.4rem;margin:0 0 .1rem;">
+            <h3 th:text="${dev.deviceName}" style="margin:0;padding-right:2.2rem;">设备</h3>
+            <button type="button" class="btn-icon edit-only" title="编辑设备" aria-label="编辑设备" th:onclick="|openEditDevice(${dev.deviceId});event.stopPropagation();|">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5V20h2.5L17.81 8.69a1 1 0 0 0 0-1.41L15.72 5.19a1 1 0 0 0-1.41 0L5.5 14.5M13.5 6.5l2 2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">编辑设备</span>
+            </button>
+        </div>
+        <p class="text-dim" style="margin:0.3rem 0;font-size:0.7rem;letter-spacing:.5px;">
+            协议: <span th:text="${dev.protocol}"></span>
+            | 连接: <strong th:text="${dev.connectionOk} ? '正常' : '失败'" th:style="${dev.connectionOk} ? 'color:var(--color-ok);' : 'color:var(--color-danger);'"></strong>
+        </p>
+        <div class="inline-actions" style="margin:0.3rem 0;flex-wrap:wrap;gap:.4rem;">
+            <button type="button" class="btn-icon ok edit-only" title="添加点位" aria-label="添加点位" onclick="openNamespaces(this.closest('.card').dataset.deviceId);event.stopPropagation();">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                <span class="visually-hidden">添加点位</span>
+            </button>
+            <button type="button" class="btn-icon edit-only" title="编辑点位" aria-label="编辑点位" onclick="openEditTags(this.closest('.card').dataset.deviceId);event.stopPropagation();">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5V20h2.5L17.81 8.69a1 1 0 0 0 0-1.41L15.72 5.19a1 1 0 0 0-1.41 0L5.5 14.5M13.5 6.5l2 2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">编辑点位</span>
+            </button>
+        </div>
+        <table class="table tags-table" style="font-size:0.72rem;position:relative;">
             <thead>
-            <tr style="text-align:left;border-bottom:1px solid #00bfff;">
-                <th style="padding:4px;">Tag</th>
-                <th style="padding:4px;">地址</th>
-                <th style="padding:4px;">当前值</th>
+            <tr>
+                <th style="width:40%;position:relative;">Tag
+                    <button type="button" class="filter-btn edit-only" th:id="${'filterBtn-name-' + dev.deviceId}" th:onclick="|openFilterPop(${dev.deviceId},'name');event.stopPropagation();|" aria-label="过滤名称">
+                        <svg viewBox="0 0 24 24"><path d="M4 5h16L14 13v6l-4-2v-4z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="filter-pop" th:attr="data-device=${dev.deviceId}" th:id="${'filterPop-name-' + dev.deviceId}" data-open="0">
+                        <input type="text" placeholder="包含..." />
+                        <div class="fp-actions">
+                            <button type="button" class="fp-apply" th:onclick="|applyFilter(${dev.deviceId},'name')|">确定</button>
+                            <button type="button" class="fp-clear" th:onclick="|clearFilter(${dev.deviceId},'name')|">清除</button>
+                        </div>
+                    </div>
+                </th>
+                <th style="width:30%;position:relative;">地址
+                    <button type="button" class="filter-btn edit-only" th:id="${'filterBtn-address-' + dev.deviceId}" th:onclick="|openFilterPop(${dev.deviceId},'address');event.stopPropagation();|" aria-label="过滤地址">
+                        <svg viewBox="0 0 24 24"><path d="M4 5h16L14 13v6l-4-2v-4z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="filter-pop" th:attr="data-device=${dev.deviceId}" th:id="${'filterPop-address-' + dev.deviceId}" data-open="0">
+                        <input type="text" placeholder="包含..." />
+                        <div class="fp-actions">
+                            <button type="button" class="fp-apply" th:onclick="|applyFilter(${dev.deviceId},'address')|">确定</button>
+                            <button type="button" class="fp-clear" th:onclick="|clearFilter(${dev.deviceId},'address')|">清除</button>
+                        </div>
+                    </div>
+                </th>
+                <th style="width:30%;position:relative;">值
+                    <button type="button" class="filter-btn edit-only" th:id="${'filterBtn-value-' + dev.deviceId}" th:onclick="|openFilterPop(${dev.deviceId},'value');event.stopPropagation();|" aria-label="过滤数值">
+                        <svg viewBox="0 0 24 24"><path d="M4 5h16L14 13v6l-4-2v-4z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="filter-pop" th:attr="data-device=${dev.deviceId}" th:id="${'filterPop-value-' + dev.deviceId}" data-open="0">
+                        <input type="text" placeholder="包含..." />
+                        <div class="fp-actions">
+                            <button type="button" class="fp-apply" th:onclick="|applyFilter(${dev.deviceId},'value')|">确定</button>
+                            <button type="button" class="fp-clear" th:onclick="|clearFilter(${dev.deviceId},'value')|">清除</button>
+                        </div>
+                    </div>
+                </th>
             </tr>
             </thead>
-            <tbody>
-            <!-- Safe alternative: use data-* attributes instead of th:onclick -->
-            <tr th:each="tag : ${dev.tags}" class="tag-row" th:attr="data-device-id=${dev.deviceId},data-tag-id=${tag.id}" style="cursor:pointer;border-bottom:1px solid rgba(0,191,255,0.2);">
-                <td style="padding:4px;" th:text="${tag.name}"></td>
-                <td style="padding:4px;" th:text="${tag.address}"></td>
-                <td style="padding:4px;font-family:monospace;" th:text="${tag.value}"></td>
+            <tbody th:id="${'tagBody-' + dev.deviceId}">
+            <tr th:each="tag,stat : ${dev.tags}" th:if="${stat.index < 10}" class="tag-row" th:attr="data-device-id=${dev.deviceId},data-tag-id=${tag.id},data-tag-name=${tag.name}" onclick="event.stopPropagation();">
+                <td th:text="${tag.name}"></td>
+                <td th:text="${tag.address}"></td>
+                <td style="font-family:var(--font-mono);" th:text="${tag.value}"></td>
             </tr>
-            <tr th:if="${#lists.isEmpty(dev.tags)}">
-                <td colspan="3" style="padding:4px;color:#ffb347;">未配置标签或尚无数据</td>
-            </tr>
+            <tr th:if="${#lists.isEmpty(dev.tags)}"><td colspan="3" class="text-warn" style="padding:.35rem .3rem;">暂无点位</td></tr>
+            <tr th:if="${!#lists.isEmpty(dev.tags) and #lists.size(dev.tags) > 10}"><td colspan="3" class="text-dim" style="padding:.35rem .3rem;font-size:.6rem;">其余点位将在加载后可翻页查看...</td></tr>
             </tbody>
         </table>
+        <div class="tag-pagination" th:id="${'tagPager-' + dev.deviceId}" style="display:none;">
+            <button type="button" class="btn-icon pager-prev" aria-label="上一页" th:onclick="|changeTagPage(${dev.deviceId},-1)|">
+                <svg viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <span class="pager-info">1 / 1</span>
+            <button type="button" class="btn-icon pager-next" aria-label="下一页" th:onclick="|changeTagPage(${dev.deviceId},1)|">
+                <svg viewBox="0 0 24 24"><path d="M10 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+        </div>
     </div>
 </div>
 
-<!-- Namespace & Tag 浏览弹层 (改进版) -->
-<div id="namespaceModal">
+<!-- 历史 / 预测 抽屉 (保持) -->
+<div id="drawerOverlay" class="drawer-overlay" aria-hidden="true">
+    <div class="drawer" role="complementary" aria-label="历史与预测面板">
+        <div class="drawer-header" style="gap:.6rem;">
+            <h3 id="drawerTitle">历史趋势</h3>
+            <span id="drawerUpdateTime"></span>
+            <button class="btn-icon" type="button" title="关闭" aria-label="关闭" onclick="closeDrawer()">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">关闭</span>
+            </button>
+        </div>
+        <div class="drawer-body">
+            <div>
+                <div class="drawer-section-title">折线图</div>
+                <div class="chart-shell"><canvas id="drawerCanvas" style="width:100%;height:240px;display:block;"></canvas></div>
+                <div class="legend" style="margin-top:.35rem;">
+                    <span><i class="lg-box"></i> 历史</span>
+                    <span><i class="lg-box lg-box-forecast"></i> 预测</span>
+                </div>
+                <div id="drawerHint" class="hint" style="display:none;">当前数据非数值型或为空，显示下方表格。</div>
+                <div class="pred-btn-row">
+                    <button id="predictBtn" type="button" class="btn-icon" title="预测" aria-label="预测" onclick="doPredictInDrawer()">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15l4-5 4 6 4-8 4 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span class="visually-hidden">预测</span>
+                    </button>
+                    <span id="predictStatus" class="text-dim" style="display:none;font-size:.65rem;">预测中...</span>
+                </div>
+                <div id="metricBox" class="metrics" style="display:none;"></div>
+            </div>
+            <div>
+                <div class="drawer-section-title">最新数据 (升序)</div>
+                <div style="max-height:240px;overflow:auto;border:1px solid var(--color-border);border-radius:6px;">
+                    <table class="small-table">
+                        <thead><tr><th style="width:55%;">时间</th><th style="width:45%;">值</th></tr></thead>
+                        <tbody id="drawerTableBody"><tr><td colspan="2" style="padding:6px;" class="text-dim">加载中...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加设备 Modal -->
+<div id="addDeviceModal" class="modal-overlay" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-wrapper" role="document">
+        <div class="modal-header">
+            <h3>添加设备</h3>
+            <button class="btn-icon" type="button" title="关闭" aria-label="��闭" onclick="closeAddDeviceModal()">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">关闭</span>
+            </button>
+        </div>
+        <form id="addDeviceForm" onsubmit="return submitAddDevice()">
+            <div class="form-row">
+                <label for="devName">设备名称</label>
+                <input id="devName" type="text" placeholder="例如：Boiler-01" required maxlength="120">
+            </div>
+            <div class="form-row">
+                <label for="devProtocol">通信协议</label>
+                <select id="devProtocol" required><option value="opcua">OPC UA</option></select>
+            </div>
+            <div class="form-row">
+                <label for="devConn">连接字符串</label>
+                <input id="devConn" type="text" placeholder="opc.tcp://host:port" required maxlength="500">
+            </div>
+            <div id="addDevMsg" class="text-dim" style="font-size:.65rem;height:1em;"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-icon" title="取消" aria-label="取消" onclick="closeAddDeviceModal()">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="visually-hidden">取消</span>
+                </button>
+                <button type="submit" class="btn-icon ok" title="保存" aria-label="保存">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="visually-hidden">保存</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 设备编辑 Modal -->
+<div id="editDeviceModal" class="modal-overlay" aria-hidden="true" role="dialog" aria-modal="true" style="display:none;">
+    <div class="modal-wrapper">
+        <div class="modal-header">
+            <h3>编辑设备</h3>
+            <button class="btn-icon" type="button" title="关闭" aria-label="关闭" onclick="closeEditDeviceModal()">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">关闭</span>
+            </button>
+        </div>
+        <form id="editDeviceForm" onsubmit="return submitEditDevice()">
+            <input type="hidden" id="editDevId">
+            <div class="form-row">
+                <label for="editDevName">设备名称</label>
+                <input id="editDevName" type="text" required maxlength="120">
+            </div>
+            <div class="form-row">
+                <label for="editDevProtocol">通信协议</label>
+                <select id="editDevProtocol" required><option value="opcua">OPC UA</option></select>
+            </div>
+            <div class="form-row">
+                <label for="editDevConn">连接字符串</label>
+                <input id="editDevConn" type="text" required maxlength="500">
+            </div>
+            <div id="editDevMsg" class="text-dim" style="font-size:.65rem;height:1em;"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-icon" title="取消" aria-label="取消" onclick="closeEditDeviceModal()">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="visually-hidden">取消</span>
+                </button>
+                <button type="submit" class="btn-icon ok" title="保存" aria-label="保存">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="visually-hidden">保存</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Namespace Modal: 用于选择 namespace 并添加点位 -->
+<div id="namespaceModal" style="display:none;">
     <div class="ns-wrapper">
         <div class="ns-header">
-            <h2 style="margin:0;font-size:1.05rem;">Namespaces 浏览</h2>
+            <h2>浏览 Namespaces 并添加点位</h2>
             <div style="display:flex;gap:.6rem;align-items:center;">
-                <span id="nsSelectedLabel" style="font-size:.7rem;color:#7fdcff;"></span>
-                <button onclick="closeNsModal()" class="close-btn">关闭</button>
+                <span id="nsSelectedLabel" class="text-dim" style="font-size:.6rem;"></span>
+                <button onclick="closeNsModal()" class="btn-icon" title="关闭" aria-label="关闭">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="visually-hidden">关闭</span>
+                </button>
             </div>
         </div>
         <div class="ns-columns">
             <div class="ns-left">
-                <h3 style="margin:0 0 .4rem 0;font-size:.8rem;letter-spacing:.5px;color:#7fdcff;">Namespaces</h3>
+                <h3 style="margin:0 0 .4rem 0;font-size:.65rem;letter-spacing:.5px;color:var(--color-text-dim);text-transform:uppercase;">Namespaces</h3>
                 <ul id="nsList"></ul>
             </div>
             <div class="ns-right">
                 <div class="ns-tags-head">
-                    <div style="font-weight:600;">Namespace 下 Tags (点击添加)</div>
+                    <div style="font-weight:500;letter-spacing:.5px;">Namespace 下 Tags (点击添加)</div>
                     <div class="ns-status" id="nsStatus"></div>
                 </div>
                 <div class="ns-tags-container">
@@ -113,162 +272,39 @@
         </div>
     </div>
 </div>
-<script>
-    let auto = false;
-    let timer = null;
-    function toggleAuto(){
-        auto = !auto;
-        const btn = document.getElementById('autoBtn');
-        if(auto){
-            btn.textContent='关闭自动刷新';
-            fetchAndRender();
-            timer = setInterval(fetchAndRender,5000);
-        } else {
-            btn.textContent='开启自动刷新';
-            if(timer) clearInterval(timer);
-        }
-    }
-    function attachRowClicks(scope=document){
-        scope.querySelectorAll('.tag-row').forEach(tr=>{
-            tr.addEventListener('click',()=>{
-                const devId = tr.getAttribute('data-device-id');
-                const tagId = tr.getAttribute('data-tag-id');
-                if(devId && tagId){
-                    window.location = '/data/history/' + encodeURIComponent(devId) + '/' + encodeURIComponent(tagId);
-                }
-            }, { once: true });
-        });
-    }
-    attachRowClicks();
 
-    // ===== Namespace 浏览逻辑 =====
-    let currentNsDeviceId = null;
-    function openNamespaces(deviceId){
-        currentNsDeviceId = deviceId;
-        const modal = document.getElementById('namespaceModal');
-        modal.style.display='flex';
-        const ul = document.getElementById('nsList');
-        ul.innerHTML = '<li class="ns-item" style="cursor:default;opacity:.7;">加载中...</li>';
-        document.getElementById('nsTagBody').innerHTML = '<tr><td colspan="4" class="ns-empty">请选择左侧 Namespace</td></tr>';
-        document.getElementById('nsStatus').textContent = '';
-        document.getElementById('nsSelectedLabel').textContent = '';
-        fetch(`/data/api/${deviceId}/namespaces`).then(r=>r.json()).then(list=>{
-            ul.innerHTML = '';
-            if(!list || list.length===0){
-                ul.innerHTML = '<li class="ns-item" style="cursor:default;color:#ffb347;">无数据或读取失败</li>';
-                return;
-            }
-            list.forEach(ns=>{
-                const li = document.createElement('li');
-                li.className='ns-item';
-                li.innerHTML = `<span style="flex:1;">#${ns.index} ${ns.uri||''}</span><span style='font-size:0.65rem;color:#7fdcff;'>查看</span>`;
-                li.addEventListener('click',()=>loadNamespaceTags(deviceId, ns.index, li, ns.uri));
-                ul.appendChild(li);
-            });
-        }).catch(err=>{
-            ul.innerHTML = '<li class="ns-item" style="cursor:default;color:#ff4d4f;">加载失败 '+err+'</li>';
-        });
-    }
-    function closeNsModal(){
-        document.getElementById('namespaceModal').style.display='none';
-    }
-    // 支持 ESC 关闭
-    document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeNsModal(); }});
+<!-- 编辑点位 Modal -->
+<div id="editTagsModal" class="modal-overlay" aria-hidden="true" role="dialog" aria-modal="true" style="display:none;">
+    <div class="modal-wrapper" style="max-width:640px;" role="document">
+        <div class="modal-header">
+            <h3>编辑点位</h3>
+            <button class="btn-icon" type="button" title="关闭" aria-label="关闭" onclick="closeEditTagsModal()">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">关闭</span>
+            </button>
+        </div>
+        <div style="max-height:60vh;overflow:auto;">
+            <table class="table small-table" style="font-size:.7rem;">
+                <thead><tr><th style="width:28%;">名称</th><th style="width:42%;">地址</th><th style="width:30%;">操作</th></tr></thead>
+                <tbody id="editTagsBody"><tr><td colspan="3" class="text-dim" style="padding:.4rem;">加载中...</td></tr></tbody>
+            </table>
+        </div>
+        <div id="editTagsMsg" class="text-dim" style="font-size:.6rem;height:1em;margin-top:.3rem;"></div>
+        <div class="modal-actions" style="margin-top:.4rem;">
+            <button type="button" class="btn-icon" title="关闭" aria-label="关闭" onclick="closeEditTagsModal()">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">关闭</span>
+            </button>
+        </div>
+    </div>
+</div>
 
-    function escHtml(str){
-        if(str==null) return '';
-        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
+<!-- FAB 悬浮操作按钮 (简化：直接添加设备) -->
+<div class="fab-container" id="fab">
+    <button class="fab-main" id="fabMain" type="button" aria-label="添加设备" onclick="openAddDeviceModal()">＋</button>
+</div>
 
-    function loadNamespaceTags(deviceId, nsIndex, li, uri){
-        // 高亮
-        document.querySelectorAll('#nsList .ns-item').forEach(x=>x.classList.remove('active'));
-        li.classList.add('active');
-        document.getElementById('nsSelectedLabel').textContent = `已选: #${nsIndex}${uri?(' '+uri):''}`;
-        const body = document.getElementById('nsTagBody');
-        body.innerHTML = `<tr><td colspan='4' class='ns-empty'>加载中...</td></tr>`;
-        fetch(`/data/api/${deviceId}/namespaces/${nsIndex}/tags`).then(r=>r.json()).then(tags=>{
-            if(!tags || tags.length===0){
-                body.innerHTML = `<tr><td colspan='4' class='ns-empty'>无数据</td></tr>`;
-                document.getElementById('nsStatus').textContent = '';
-                return;
-            }
-            body.innerHTML = tags.map(t=>{
-                const nm = escHtml(t.name||'');
-                const addr = escHtml(t.address||'');
-                const val = (t.value===null||t.value===undefined)?'':escHtml(t.value);
-                return `<tr><td>${nm}</td><td>${addr}</td><td>${val}</td><td class='action-cell'><button type='button' class='add-btn' onclick='quickAddTag(${deviceId},"${nm.replace(/"/g,'&quot;')}","${addr.replace(/"/g,'&quot;')}",this)'>添加</button></td></tr>`;
-            }).join('');
-            document.getElementById('nsStatus').textContent = `已加载 ${tags.length} 条`;
-        }).catch(err=>{
-            body.innerHTML = `<tr><td colspan='4' class='ns-empty' style='color:#ff4d4f;'>加载失败 ${err}</td></tr>`;
-            document.getElementById('nsStatus').textContent = '';
-        });
-    }
-
-    function quickAddTag(deviceId, name, address, btn){
-        if(!btn || btn.disabled) return;
-        btn.disabled = true;
-        const originText = btn.textContent;
-        btn.textContent = '添加中...';
-        fetch(`/data/api/${deviceId}/tags`,{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({name:name,address:address})
-        }).then(r=>r.json()).then(resp=>{
-            if(resp.success){
-                btn.textContent='已添加';
-                btn.classList.add('added');
-                showNsMessage('添加成功: '+ (resp.name||name), true);
-                // 刷新主卡片(如果开启自动刷新则等待定时器; 否则手动刷新一次)
-                fetchAndRender();
-            } else {
-                btn.textContent= originText;
-                btn.disabled = false;
-                showNsMessage('失败: '+resp.message, false);
-            }
-        }).catch(err=>{
-            btn.textContent= originText;
-            btn.disabled = false;
-            showNsMessage('异常: '+err, false);
-        });
-    }
-
-    function showNsMessage(msg, ok){
-        const status = document.getElementById('nsStatus');
-        status.innerHTML = `<span class='${ok?'msg-ok':'msg-err'}'>${msg}</span>`;
-        setTimeout(()=>{ if(status.innerHTML.includes(msg)) status.innerHTML=''; }, 4000);
-    }
-
-    function fetchAndRender(){
-        fetch('/data/api/latest').then(r=>r.json()).then(list=>{
-            const grid = document.querySelector('.grid');
-            if(!grid) return;
-            grid.innerHTML = '';
-            if(!list || list.length===0){
-                return;
-            }
-            list.forEach(dev=>{
-                const card = document.createElement('div');
-                card.className='card';
-                const rowsHtml = (dev.tags||[]).map(t=>`<tr class='tag-row' data-device-id='${dev.deviceId}' data-tag-id='${t.id??''}' style='cursor:pointer;border-bottom:1px solid rgba(0,191,255,0.2);'>\n<td style='padding:4px;'>${t.name}</td>\n<td style='padding:4px;'>${t.address||''}</td>\n<td style='padding:4px;font-family:monospace;'>${t.value||''}</td></tr>`).join('');
-                card.innerHTML = `
-<h3>${dev.deviceName} (ID:${dev.deviceId})</h3>
-<p style="margin:0.3rem 0;font-size:0.85rem;">协议: ${dev.protocol||''} | 最新时间: <strong>${dev.timestamp||''}</strong></p>
-<div style='margin:0.3rem 0;display:flex;gap:0.5rem;flex-wrap:wrap;'><button type='button' class='ns-btn' onclick='openNamespaces(${dev.deviceId})'>查看Namespaces</button></div>
-<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
-<thead><tr style='text-align:left;border-bottom:1px solid #00bfff;'><th style='padding:4px;'>Tag</th><th style='padding:4px;'>地址</th><th style='padding:4px;'>当前值</th></tr></thead>
-<tbody>
-${rowsHtml}
-${(!dev.tags || dev.tags.length===0)?"<tr><td colspan='3' style='padding:4px;color:#ffb347;'>未配置标签或尚无数据</td></tr>":''}
-</tbody></table>`;
-                grid.appendChild(card);
-                attachRowClicks(card);
-            });
-            const ts = new Date();
-            document.getElementById('lastRefresh').textContent = '最后刷新: ' + ts.toLocaleTimeString();
-        }).catch(err=>console.error('刷新失败',err));
-    }
-</script>
+<!-- External modular scripts -->
+<script th:src="@{/js/data-dashboard.js}" src="/js/data-dashboard.js" defer></script>
 </body>
 </html>

@@ -6,15 +6,19 @@
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>3.5.6</version>
-		<relativePath/> <!-- lookup parent from repository -->
+		<relativePath/>
 	</parent>
 	<groupId>com.sandy</groupId>
 	<artifactId>aiot-vision-collector</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>aiot-vision-collector</name>
+	<description>AIoT Vision Collector</description>
 	<properties>
 		<java.version>17</java.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<milo.version>0.6.13</milo.version>
+		<lombok.version>1.18.40</lombok.version>
+		<iotdb.session.version>2.0.5</iotdb.session.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -37,21 +41,13 @@
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<version>1.18.40</version>
+			<version>${lombok.version}</version>
 		</dependency>
-
 		<dependency>
 			<groupId>org.apache.iotdb</groupId>
 			<artifactId>iotdb-session</artifactId>
-			<version>2.0.5</version>
+			<version>${iotdb.session.version}</version>
 		</dependency>
-		<!-- ONNX runtime kept for NB 预测 -->
-		<dependency>
-			<groupId>com.microsoft.onnxruntime</groupId>
-			<artifactId>onnxruntime</artifactId>
-			<version>1.18.0</version>
-		</dependency>
-		<!-- Milo OPC UA client (still used) -->
 		<dependency>
 			<groupId>org.eclipse.milo</groupId>
 			<artifactId>sdk-client</artifactId>
@@ -59,16 +55,11 @@
 			<optional>true</optional>
 		</dependency>
 		<dependency>
-			<groupId>com.fasterxml.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
-		</dependency>
-		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
-
 	<build>
 		<plugins>
 			<plugin>
@@ -79,6 +70,7 @@
 						<path>
 							<groupId>org.projectlombok</groupId>
 							<artifactId>lombok</artifactId>
+							<version>${lombok.version}</version>
 						</path>
 					</annotationProcessorPaths>
 				</configuration>
@@ -97,5 +89,4 @@
 			</plugin>
 		</plugins>
 	</build>
-
 </project>

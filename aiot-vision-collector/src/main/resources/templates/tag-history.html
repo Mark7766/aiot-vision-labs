@@ -2,56 +2,50 @@
 <html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(~{::body})}">
 <body>
 <div class="header">
-    <h1>标签历史数据</h1>
-    <p th:if="${error}" th:text="${error}" style="color:#ff6666;"></p>
+    <h1>运行状态 · 历史趋势</h1>
+    <p th:if="${error}" th:text="${error}" class="text-danger" style="margin:.3rem 0 .6rem;"></p>
     <div th:if="${device}" style="margin-bottom:1rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
-        <a href="/data" class="button-link">返回实时数据</a>
-        <h2 style="margin:0;" th:text="${device.name} + ' - ' + ${tagName}"></h2>
-        <span style="font-size:.85rem;color:#7fdcff;">最近 200 条</span>
+        <a href="/data" class="btn-icon" title="返回实时数据" aria-label="返回实时数据">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="visually-hidden">返回实时数据</span>
+        </a>
+        <h2 style="margin:0;font-size:1.1rem;" th:text="${device.name} + ' - ' + ${tagName}"></h2>
+        <span class="badge-accent" style="font-size:.6rem;">最近200条</span>
     </div>
 </div>
 
 <div class="card" th:if="${#lists.isEmpty(entries)}">
-    <p>暂无历史数据</p>
+    <p class="text-dim">暂无历史数据</p>
 </div>
-<!-- 动态无数据占位（首屏有数据时用于后续空数据提示） -->
 <div id="noDataDyn" class="card" style="display:none;">
-    <p>暂时无历史数据</p>
+    <p class="text-dim">暂时无历史数据</p>
 </div>
 
 <div th:if="${!#lists.isEmpty(entries)}">
     <div class="card" style="margin-bottom:0.8rem;">
         <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-            <strong>视图:</strong>
+            <strong style="font-size:.65rem;letter-spacing:.5px;color:var(--color-text-dim);">视图</strong>
             <div class="seg">
-                <button id="btnLine" class="seg-btn active" type="button">折线图</button>
-                <button id="btnTable" class="seg-btn" type="button">表格</button>
+                <button id="btnLine" class="btn-icon active" type="button" title="折线图" aria-label="折线图">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l5-6 4 5 5-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="visually-hidden">折线图</span>
+                </button>
+                <button id="btnTable" class="btn-icon" type="button" title="表格" aria-label="表格">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4zM10 6v12M4 11.5h16" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="visually-hidden">表格</span>
+                </button>
             </div>
             <div style="flex:1 0 auto"></div>
-            <button id="btnPredict" class="seg-btn" type="button" title="基于最近历史进行短期预测">预测</button>
-            <span id="predictStatus" style="font-size:.85rem;color:#7fdcff;display:none;">预测中...</span>
+            <button id="btnPredict" class="btn-icon" type="button" title="预测" aria-label="预测">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15l4-5 4 6 4-8 4 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">预测</span>
+            </button>
+            <span id="predictStatus" class="text-dim" style="font-size:.7rem;display:none;">预测中...</span>
         </div>
     </div>
 
-    <style>
-        .seg{display:inline-flex;border:1px solid #00bfff;border-radius:6px;overflow:hidden}
-        .seg-btn{background:#082031;color:#cfefff;border:none;padding:.35rem .8rem;cursor:pointer;font-size:.85rem}
-        .seg-btn.active{background:#00bfff;color:#021622}
-        #chartPanel{padding:.5rem 0.5rem 0.4rem 0.5rem}
-        #histCanvas{width:100%;height:320px;display:block;background:#061a27;border:1px solid rgba(0,191,255,.2);border-radius:4px}
-        .hint{font-size:.85rem;color:#ffb347;margin-top:.4rem}
-        .tbl-wrap{overflow-x:auto}
-        .legend{display:flex;gap:1rem;align-items:center;margin-top:.3rem;color:#7fdcff;font-size:.85rem}
-        .lg-box{display:inline-block;width:14px;height:3px;background:#00bfff;border-radius:2px}
-        .lg-box-forecast{background:#ffa500}
-        .metrics{margin-top:.4rem;color:#cfefff;font-size:.9rem}
-        .metrics small{color:#7fdcff}
-        .chart-tooltip{position:absolute;pointer-events:none;background:rgba(0,0,0,.75);color:#fff;padding:.4rem .6rem;border-radius:4px;font-size:.75rem;line-height:1.2;border:1px solid #00bfff;z-index:10;white-space:nowrap;}
-        .chart-wrapper{position:relative;}
-    </style>
-
-    <div id="chartPanel" class="card chart-wrapper">
-        <canvas id="histCanvas"></canvas>
+    <div id="chartPanel" class="card chart-wrapper" style="padding:.5rem .6rem .6rem;">
+        <canvas id="histCanvas" style="width:100%;height:320px;display:block;background:#061a27;border:1px solid rgba(0,183,255,.15);border-radius:4px;"></canvas>
         <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
         <div class="legend">
             <span><i class="lg-box"></i> 历史</span>
@@ -62,394 +56,25 @@
     </div>
 
     <div id="tablePanel" class="card tbl-wrap" style="display:none;">
-        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;min-width:420px;">
+        <table class="table" style="font-size:.75rem;min-width:420px;">
             <thead>
-            <tr style="text-align:left;border-bottom:1px solid #00bfff;">
-                <th style="padding:4px;">时间</th>
-                <th style="padding:4px;">值</th>
+            <tr>
+                <th style="width:55%;">时间</th>
+                <th style="width:45%;">值</th>
             </tr>
             </thead>
             <tbody id="histTbody">
             <tr th:each="e : ${entries}">
-                <td style="padding:4px;font-family:monospace;" th:text="${e.timestamp}"></td>
-                <td style="padding:4px;font-family:monospace;" th:text="${e.value}"></td>
+                <td style="font-family:var(--font-mono);" th:text="${e.timestamp}"></td>
+                <td style="font-family:var(--font-mono);" th:text="${e.value}"></td>
             </tr>
             </tbody>
         </table>
     </div>
 </div>
 
-<script th:inline="javascript">
-// 直接注入 entries、设备与标签标识
-const entries = /*[[${entries}]]*/ [];
-const deviceId = /*[[${device.id}]]*/ 0;
-const tagName = /*[[${tagName}]]*/ ''; // 仅用于展示
-const tagId = /*[[${tagId}]]*/ 0;      // 新增: 用于后端接口调用
-
-// 兼容：如果内联未生效，则从表格解析
-(function ensureEntries(){
-  if (entries && entries.length) { window.entries = entries; return; }
-  const rows = document.querySelectorAll('#histTbody tr');
-  const tmp = [];
-  rows.forEach(r=>{
-    const t = r.children[0]?.textContent?.trim();
-    const v = r.children[1]?.textContent?.trim();
-    if (t) tmp.push({timestamp:t, value:v});
-  });
-  window.entries = tmp;
-})();
-
-const btnLine = document.getElementById('btnLine');
-const btnTable = document.getElementById('btnTable');
-const btnPredict = document.getElementById('btnPredict');
-const predictStatus = document.getElementById('predictStatus');
-const chartPanel = document.getElementById('chartPanel');
-const tablePanel = document.getElementById('tablePanel');
-const hint = document.getElementById('chartHint');
-const canvas = document.getElementById('histCanvas');
-const metricBox = document.getElementById('metricBox');
-const noDataDyn = document.getElementById('noDataDyn');
-const tbody = document.getElementById('histTbody');
-let ctx = canvas.getContext('2d');
-let refreshTimer = null;
-let chartMeta = null; // 存储最近一次绘图的尺度数据供鼠标事件使用
-
-// 全局预测缓存：{points:[{t,y}], intervalMs:number}
-window.prediction = null;
-
-function isNumeric(x){
-  if (x === null || x === undefined) return false;
-  const n = Number(String(x).replace(/,/g,''));
-  return !isNaN(n) && isFinite(n);
-}
-
-function parseTs(s){
-  if(!s) return NaN;
-  s = String(s).trim();
-  // 标准化：yyyy-MM-dd HH:mm:ss -> yyyy-MM-ddTHH:mm:ss 以便 Date.parse 跨浏览器解析
-  if (s.length >= 19 && s.charAt(10) === ' ') {
-    const core = s.substring(0,19);
-    s = core.substring(0,10)+'T'+core.substring(11);
-  }
-  let t = Date.parse(s);
-  if (!isNaN(t)) return t;
-  // 备用策略：替换 - 为 / 再用 new Date()
-  try { t = new Date(s.replace(/-/g,'/')).getTime(); } catch(e){ t = NaN; }
-  return t;
-}
-
-function parseData(es){
-  const pts = [];
-  for (const e of es){
-    const t = parseTs(e.timestamp);
-    if (isNaN(t)) continue;
-    const raw = e.value;
-    if (!isNumeric(raw)) continue;
-    const y = Number(String(raw).replace(/,/g,''));
-    if (!isNaN(y) && isFinite(y)) pts.push({t, y});
-  }
-  return pts;
-}
-
-function inferIntervalMs(pts){
-  if (!pts || pts.length < 2) return 0;
-  const diffs = [];
-  for (let i=1;i<pts.length;i++){
-    const d = pts[i].t - pts[i-1].t;
-    if (d > 0) diffs.push(d);
-  }
-  if (!diffs.length) return 0;
-  diffs.sort((a,b)=>a-b);
-  const mid = Math.floor(diffs.length/2);
-  return diffs.length % 2 ? diffs[mid] : Math.floor((diffs[mid-1]+diffs[mid])/2);
-}
-
-function resizeCanvas(){
-  const ratio = Math.max(window.devicePixelRatio||1, 1);
-  const rect = canvas.getBoundingClientRect();
-  const targetW = Math.floor(rect.width * ratio);
-  const targetH = Math.floor(rect.height * ratio);
-  if (canvas.width !== targetW || canvas.height !== targetH){
-    canvas.width = targetW; canvas.height = targetH;
-    ctx = canvas.getContext('2d');
-  }
-}
-
-function drawChart(){
-  resizeCanvas();
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0,0,W,H);
-  const pts = parseData(window.entries||[]);
-  const fpts = (window.prediction && window.prediction.points) ? window.prediction.points : [];
-  if (!pts.length){
-    // 若当前选择折线图但不可绘制，切到表格
-    chartPanel.style.display = 'none';
-    tablePanel.style.display = '';
-    btnTable?.classList.add('active');
-    btnLine?.classList.remove('active');
-    hint.style.display = (window.entries && window.entries.length) ? '' : 'none';
-    return;
-  }
-  hint.style.display = 'none';
-  const all = fpts && fpts.length ? pts.concat(fpts) : pts;
-  const tMin = Math.min(...all.map(p=>p.t));
-  const tMax = Math.max(...all.map(p=>p.t));
-  let yMin = Math.min(...all.map(p=>p.y));
-  let yMax = Math.max(...all.map(p=>p.y));
-  if (yMin === yMax){ yMin -= 1; yMax += 1; }
-  const yPad = (yMax - yMin) * 0.1;
-  yMin -= yPad; yMax += yPad;
-  const L = 60, R = 20, T = 20, B = 40;
-  // 背景及坐标
-  ctx.fillStyle = '#cfefff';
-  ctx.strokeStyle = 'rgba(0,191,255,0.35)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(L,T, W-L-R, H-T-B);
-  ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.font = `${12 * (window.devicePixelRatio||1)}px monospace`;
-  const yTicks = 4;
-  for (let i=0;i<=yTicks;i++){
-    const yy = T + (H-T-B) * (i/yTicks);
-    const v = (yMax - (yMax - yMin) * (i/yTicks));
-    ctx.strokeStyle = 'rgba(0,191,255,0.15)';
-    ctx.beginPath(); ctx.moveTo(L,yy); ctx.lineTo(W-R,yy); ctx.stroke();
-    ctx.fillStyle = '#7fdcff';
-    ctx.fillText(v.toFixed(2), L-6, yy);
-  }
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  const xTicks = 4;
-  for (let i=0;i<=xTicks;i++){
-    const ratio = (xTicks===0?0:i/xTicks);
-    const xx = L + (W-L-R) * ratio;
-    const tt = new Date(tMin + (tMax - tMin) * ratio);
-    const label = `${tt.getHours().toString().padStart(2,'0')}:${tt.getMinutes().toString().padStart(2,'0')}:${tt.getSeconds().toString().padStart(2,'0')}`;
-    ctx.fillStyle = '#7fdcff';
-    ctx.fillText(label, xx, H-B+6);
-  }
-  // 历史线
-  ctx.setLineDash([]);
-  ctx.strokeStyle = '#00bfff'; ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i=0;i<pts.length;i++){
-    const p = pts[i];
-    const xr = (tMax===tMin) ? (i/(Math.max(pts.length-1,1))) : ((p.t - tMin)/(tMax - tMin));
-    const x = L + (W-L-R) * xr;
-    const yr = (p.y - yMin)/(yMax - yMin);
-    const y = H - B - (H-T-B) * yr;
-    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  }
-  ctx.stroke();
-  ctx.fillStyle = '#7fdcff';
-  for (let i=0;i<pts.length;i++){
-    const p = pts[i];
-    const xr = (tMax===tMin) ? (i/(Math.max(pts.length-1,1))) : ((p.t - tMin)/(tMax - tMin));
-    const x = L + (W-L-R) * xr;
-    const yr = (p.y - yMin)/(yMax - yMin);
-    const y = H - B - (H-T-B) * yr;
-    ctx.beginPath(); ctx.arc(x,y, 2.5*(window.devicePixelRatio||1), 0, Math.PI*2); ctx.fill();
-  }
-  // 预测线
-  if (fpts && fpts.length){
-    ctx.setLineDash([6,4]);
-    ctx.strokeStyle = '#ffa500'; ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let i=0;i<fpts.length;i++){
-      const p = fpts[i];
-      const xr = (tMax===tMin) ? (i/(Math.max(fpts.length-1,1))) : ((p.t - tMin)/(tMax - tMin));
-      const x = L + (W-L-R) * xr;
-      const yr = (p.y - yMin)/(yMax - yMin);
-      const y = H - B - (H-T-B) * yr;
-      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-    }
-    ctx.stroke(); ctx.setLineDash([]);
-  }
-  chartMeta = {tMin,tMax,yMin,yMax,L,R,T,B,W,H,pts,fpts};
-}
-
-function renderTable(){
-  if (!tbody) return;
-  const rows = (window.entries||[]).map(e => `<tr><td style="padding:4px;font-family:monospace;">${e.timestamp||''}</td><td style="padding:4px;font-family:monospace;">${e.value||''}</td></tr>`).join('');
-  tbody.innerHTML = rows;
-}
-
-function updatePanels(){
-  const hasData = (window.entries && window.entries.length);
-  if (!hasData){
-    // 显示无数据
-    if (noDataDyn) noDataDyn.style.display = '';
-    chartPanel && (chartPanel.style.display = 'none');
-    tablePanel && (tablePanel.style.display = 'none');
-    return;
-  } else {
-    if (noDataDyn) noDataDyn.style.display = 'none';
-  }
-  // 根据当前选项显示相应视图
-  const lineActive = btnLine && btnLine.classList.contains('active');
-  if (lineActive) {
-    chartPanel.style.display = '';
-    tablePanel.style.display = 'none';
-    drawChart();
-  } else {
-    chartPanel.style.display = 'none';
-    tablePanel.style.display = '';
-    renderTable();
-  }
-  updateAccuracy();
-}
-
-function fetchLatest(){
-  if (!deviceId || !tagId) return;
-  const url = `/data/api/history/${deviceId}/${tagId}`;
-  fetch(url, {cache:'no-store'})
-    .then(r => r.ok ? r.json() : [])
-    .then(list => {
-      if (!Array.isArray(list)) return;
-      window.entries = list;
-      // 渲染当前视图
-      updatePanels();
-    })
-    .catch(() => {/* 忽略瞬时错误 */});
-}
-
-function showLine(){
-  chartPanel.style.display = '';
-  tablePanel.style.display = 'none';
-  btnLine.classList.add('active');
-  btnTable.classList.remove('active');
-  drawChart();
-}
-function showTable(){
-  chartPanel.style.display = 'none';
-  tablePanel.style.display = '';
-  btnTable.classList.add('active');
-  btnLine.classList.remove('active');
-  renderTable();
-}
-
-function updateAccuracy(){
-  const pts = parseData(window.entries||[]);
-  const fpts = (window.prediction && window.prediction.points) ? window.prediction.points : [];
-  if (!pts.length || !fpts.length){ metricBox.style.display='none'; metricBox.innerHTML=''; return; }
-  const interval = window.prediction.intervalMs || inferIntervalMs(pts) || 0;
-  const tol = Math.max(1, Math.floor(interval/2));
-  const actualMap = new Map();
-  for (const p of pts){ actualMap.set(p.t, p.y); }
-  // 为了容忍轻微漂移，构建按时间索引的数组供近邻查找
-  const aTs = pts.map(p=>p.t);
-  let matched = [];
-  for (const fp of fpts){
-    // 在容忍度内寻找最近实际点
-    let bestT = null, bestD = Number.MAX_SAFE_INTEGER, bestY = null;
-    for (const t of aTs){
-      const d = Math.abs(t - fp.t);
-      if (d < bestD && d <= tol){ bestD = d; bestT = t; }
-    }
-    if (bestT !== null){
-      bestY = actualMap.get(bestT) ?? (pts.find(p=>p.t===bestT)?.y);
-      matched.push({pred: fp.y, actual: bestY});
-    }
-  }
-  if (!matched.length){ metricBox.style.display='none'; metricBox.innerHTML=''; return; }
-  // 计算 MAE / RMSE / MAPE（忽略接近0的实际值）
-  let se=0, ae=0, mapeSum=0, mapeCnt=0;
-  for (const m of matched){
-    const err = (m.actual - m.pred);
-    ae += Math.abs(err);
-    se += err*err;
-    if (Math.abs(m.actual) > 1e-6){ mapeSum += Math.abs(err / m.actual); mapeCnt++; }
-  }
-  const n = matched.length;
-  const mae = ae / n;
-  const rmse = Math.sqrt(se / n);
-  const mape = mapeCnt ? (mapeSum / mapeCnt * 100) : null;
-  const html = `评估（与已产生的实际数据对比）: ` +
-    `<small>样本=${n}</small> | ` +
-    `<small>MAE=${mae.toFixed(4)}</small> | ` +
-    `<small>RMSE=${rmse.toFixed(4)}</small>` +
-    (mape!==null?` | <small>MAPE=${mape.toFixed(2)}%</small>`:'');
-  metricBox.innerHTML = html;
-  metricBox.style.display='';
-}
-
-function doPredict(){
-  if (!deviceId || !tagId) return;
-  const pts = parseData(window.entries||[]);
-  if (!pts.length){ alert('当前没有可用于预测的数值数据'); return; }
-  btnPredict.disabled = true; predictStatus.style.display = '';
-  const url = `/data/api/predict/${deviceId}/${tagId}`;
-  fetch(url, {cache:'no-store'})
-    .then(r=>r.json())
-    .then(data=>{
-      const pptsRaw = Array.isArray(data?.predictionPoints)? data.predictionPoints : [];
-      const tmp = [];
-      for (const pp of pptsRaw){
-        if (!pp || !pp.timestamp || !isNumeric(pp.value)) continue;
-        const t = parseTs(pp.timestamp);
-        if (isNaN(t)) continue;
-        tmp.push({t, y:Number(pp.value)});
-      }
-      tmp.sort((a,b)=>a.t-b.t);
-      if (!tmp.length){
-        window.prediction = null;
-        console.warn('[predict] 无有效预测时间点，原始数据：', pptsRaw);
-        updatePanels();
-        return;
-      }
-      // 若存在异常时间（过滤后 < 原始数），提示一次
-      if (tmp.length < pptsRaw.length) {
-        console.warn('[predict] 过滤掉无效预测时间点 count=', pptsRaw.length - tmp.length);
-      }
-      // 计算预测间隔（中位数）
-      let intervalMs = 0;
-      if (tmp.length>1){
-        const diffs=[]; for (let i=1;i<tmp.length;i++){ const d=tmp[i].t - tmp[i-1].t; if(d>0) diffs.push(d);} if(diffs.length){ diffs.sort((a,b)=>a-b); intervalMs = diffs[Math.floor(diffs.length/2)]; }
-      }
-      window.prediction = {points:tmp, intervalMs};
-      updatePanels();
-    })
-    .catch(err=>{ console.warn('[predict] 请求失败', err); })
-    .finally(()=>{ btnPredict.disabled = false; predictStatus.style.display = 'none'; });
-}
-
-// 鼠标悬停提示
-const tooltip = document.getElementById('chartTooltip');
-canvas.addEventListener('mousemove', (e)=>{
-  if (!chartMeta) return; const {tMin,tMax,L,R,T,B,W,H,pts,fpts} = chartMeta;
-  const rect = canvas.getBoundingClientRect();
-  const ratio = window.devicePixelRatio||1;
-  const x = (e.clientX - rect.left) * ratio; const y = (e.clientY - rect.top)*ratio;
-  if (x < L || x > W-R || y < T || y > H-B){ tooltip.style.display='none'; return; }
-  const t = tMin + (tMax - tMin) * ((x - L)/(W - L - R));
-  function nearest(list){ if(!list||!list.length) return null; let best=null; let bd=Number.MAX_VALUE; for(const p of list){ const d=Math.abs(p.t - t); if (d<bd){ bd=d; best=p; } } return {p:best,dt:bd}; }
-  const nHist = nearest(pts); const nPred = nearest(fpts);
-  if (!nHist && !nPred){ tooltip.style.display='none'; return; }
-  const lines=[]; let showTs = t;
-  if (nHist && nHist.p){ lines.push(`历史: ${nHist.p.y.toFixed(3)}`); showTs = nHist.p.t; }
-  if (nPred && nPred.p){ lines.push(`预测: ${nPred.p.y.toFixed(3)}`); if(!nHist|| (nPred.dt < nHist.dt)) showTs = nPred.p.t; }
-  const dt = new Date(showTs);
-  const tsStr = `${dt.getFullYear()}-${(dt.getMonth()+1).toString().padStart(2,'0')}-${dt.getDate().toString().padStart(2,'0')} ${dt.getHours().toString().padStart(2,'0')}:${dt.getMinutes().toString().padStart(2,'0')}:${dt.getSeconds().toString().padStart(2,'0')}`;
-  lines.unshift(tsStr);
-  tooltip.innerHTML = lines.join('<br/>');
-  tooltip.style.display='';
-  // 定位（使用原始 CSS 像素）
-  const canvasLeft = rect.left + window.scrollX; const canvasTop = rect.top + window.scrollY;
-  tooltip.style.left = (e.clientX + 12) + 'px';
-  tooltip.style.top = (e.clientY + 12) + 'px';
-});
-canvas.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
-
-btnLine?.addEventListener('click', showLine);
-btnTable?.addEventListener('click', showTable);
-btnPredict?.addEventListener('click', doPredict);
-window.addEventListener('resize', ()=>{ if (chartPanel.style.display !== 'none') drawChart(); });
-
-document.addEventListener('visibilitychange', ()=>{
-  if (document.hidden){ if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
-  else { if (!refreshTimer) { fetchLatest(); refreshTimer = setInterval(fetchLatest, 5000); } }
-});
-
-// 初始化：默认显示折线图（如果可绘制），然后启动定时刷新
-setTimeout(()=>{ showLine(); updatePanels(); }, 0);
-refreshTimer = setInterval(fetchLatest, 1000);
-</script>
+<!-- Inject page data -->
+<script th:inline="javascript">window.__PAGE_DATA__={entries:/*[[${entries}]]*/[],deviceId:/*[[${device.id}]]*/0,tagId:/*[[${tagId}]]*/0,tagName:/*[[${tagName}]]*/''};</script>
+<script th:src="@{/js/tag-history.js}" src="/js/tag-history.js" defer></script>
 </body>
 </html>

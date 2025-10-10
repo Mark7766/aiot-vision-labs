@@ -1,26 +1,45 @@
 server:
-  port: 8080
+  port: ${AVC_SERVER_PORT:8080}
 
 spring:
   datasource:
     # 文件模式 H2，去掉 AUTO_SERVER 与 DB_CLOSE_ON_EXIT 以兼容 2.x 版本
     # 保留 DB_CLOSE_DELAY=-1 保证连接关闭后不立即卸载, MODE=MySQL 方便未来迁移
-    url: jdbc:h2:file:./data/visiondb;MODE=MySQL;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: ${AVC_DATASOURCE_URL:jdbc:h2:file:./data/visiondb;MODE=MySQL;DB_CLOSE_DELAY=-1}
+    driver-class-name: ${AVC_DATASOURCE_DRIVER:org.h2.Driver}
+    username: ${AVC_DATASOURCE_USERNAME:sa}
+    password: ${AVC_DATASOURCE_PASSWORD:}
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+    database-platform: ${AVC_JPA_DATABASE_PLATFORM:org.hibernate.dialect.H2Dialect}
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${AVC_JPA_HIBERNATE_DDL_AUTO:update}
   h2:
     console:
-      enabled: true
+      enabled: ${AVC_H2_CONSOLE_ENABLED:true}
 
-# TsFile 存储配置
-tsfile:
-  path: data/records.tsfile
+# 预测服务配置
+predict:
+  api:
+    url: ${AVC_PREDICT_API_URL:http://localhost:50000/predict}
+    prediction-length: ${AVC_PREDICT_API_PREDICTION_LENGTH:60}
+    history-length: ${AVC_PREDICT_API_HISTORY_LENGTH:180}
+
+# 数据视图/接口配置
+data:
+  api:
+    history-limit: ${AVC_DATA_API_HISTORY_LIMIT:200}
+  view:
+    latest-minutes-window: ${AVC_DATA_VIEW_LATEST_MINUTES_WINDOW:5}
+  tag-history:
+    default-minutes: ${AVC_DATA_TAG_HISTORY_DEFAULT_MINUTES:3}
+
+# IoTDB 连接配置
+iotdb:
+  host: ${AVC_IOTDB_HOST:10.235.229.11}
+  port: ${AVC_IOTDB_PORT:6667}
+  username: ${AVC_IOTDB_USERNAME:root}
+  password: ${AVC_IOTDB_PASSWORD:root}
 
 logging:
   level:
-    aiot.vision.collector: INFO
+    aiot.vision.collector: ${AVC_LOGGING_LEVEL_APP:INFO}

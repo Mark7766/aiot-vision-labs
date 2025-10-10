@@ -1,0 +1,34 @@
+# Ignore local build outputs & IDE files
+.target
+/target
+**/target/
+
+# Maven cache (not needed in context)
+.mvn/
+.mvn/wrapper/maven-wrapper.jar
+!mvnw
+!mvnw.cmd
+
+# Git / VCS
+.git
+.gitignore
+
+# OS / editor
+*.swp
+*.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local data files (H2 / test data) - container will manage its own volume
+/data/
+*.mv.db
+*.trace.db
+
+# Logs
+logs/
+*.log
+
+# Node / front-end caches (if added later)
+node_modules/
+
