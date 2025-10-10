@@ -82,11 +82,8 @@ public class CollectorServiceByPull implements CollectorService {
         log.warn("设备 {} 进入会话限流回退, 暂停采集 {} ms", device.getName(), TOO_MANY_SESSIONS_BACKOFF_MS);
     }
 
-    @Scheduled(fixedRate = 1000)
+//    @Scheduled(fixedRate = 1000)
     public void collectData() { doCollect(); }
-
-    @Override
-    public void collectDataOnce() { doCollect(); }
 
     private void doCollect() {
         List<Device> devices = deviceRepository.findAllWithTags();

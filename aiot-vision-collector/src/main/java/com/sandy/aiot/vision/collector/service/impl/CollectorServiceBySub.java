@@ -93,9 +93,6 @@ public class CollectorServiceBySub implements CollectorService {
     @Scheduled(fixedRate = 1000)
     public void collectData() { doSub(); }
 
-    @Override
-    public void collectDataOnce() { doCollect(); }
-
     private void doSub() {
         List<Device> devices = deviceRepository.findAllWithTags();
         if (devices.isEmpty()) { return; }
@@ -137,6 +134,7 @@ public class CollectorServiceBySub implements CollectorService {
             if (tag == null || tag.getDevice() == null) return;
             Object value = val.getValue() == null ? null : val.getValue().getValue();
             DataRecord dataRecord = DataRecord.builder().deviceId(tag.getDevice().getId()).tagId(tag.getId()).value(value).timestamp(LocalDateTime.now()).build();
+            log.debug("dataRecord:{}",dataRecord.toString());
             dataStorageService.save(List.of(dataRecord));
         } catch (Exception e) { log.warn("处理订阅回调失败: {}", e.getMessage()); }
     }
@@ -152,41 +150,6 @@ public class CollectorServiceBySub implements CollectorService {
         if (rawMsg != null && rawMsg.contains("Bad_TooManySessions")) { applyBackoff(device); } else { invalidateClient(device.getId()); }
         log.error("采集失败 device={} error={}:{}", device.getName(), ex.getClass().getSimpleName(), rawMsg);
     }
-
-    private void doCollect() {
-        List<Device> devices = deviceRepository.findAllWithTags();
-        for (Device device : devices) {
-            if (isInBackoff(device)) continue;
-            List<Tag> tags = device.getTags(); if (tags==null||tags.isEmpty()) continue;
-            if (isOpcUa(device.getConnectionString())) { doOpcUaCollect(device, tags); }
-        }
-    }
-
-    private void doOpcUaCollect(Device device, List<Tag> tags) {
-        List<DataRecord> dataRecords = new ArrayList<>();
-        try {
-            OpcUaClient client = getOrCreateClient(device);
-            UaClient uaClient = client;
-            List<NodeId> nodeIds = new ArrayList<>();
-            List<Tag> validTags = new ArrayList<>();
-            for (Tag tag : tags) {
-                try { nodeIds.add(NodeId.parse(tag.getAddress())); validTags.add(tag); }
-                catch (Exception parseEx) { log.warn("解析地址失败 device={} tag={} addr={} err={}", device.getName(), tag.getName(), tag.getAddress(), parseEx.getMessage()); }
-            }
-            if (nodeIds.isEmpty()) { return; }
-            List<DataValue> dataValues = uaClient.readValues(0, TimestampsToReturn.Source, nodeIds).get();
-            for (int i=0;i<nodeIds.size();i++) {
-                DataValue dataValue = dataValues.get(i);
-                Object v = (dataValue == null || dataValue.getValue() == null) ? null : dataValue.getValue().getValue();
-                if (v != null) {
-                    Tag tag = validTags.get(i);
-                    dataRecords.add(DataRecord.builder().deviceId(device.getId()).tagId(tag.getId()).value(v).timestamp(LocalDateTime.now()).build());
-                }
-            }
-        } catch (Exception ex) { processCollectionException(device, ex); }
-        if (!dataRecords.isEmpty()) dataStorageService.save(dataRecords);
-    }
-
     @Override
     public List<NamespaceVO> getNameSpaces(Device device) throws ExecutionException, InterruptedException {
         OpcUaClient client = null;

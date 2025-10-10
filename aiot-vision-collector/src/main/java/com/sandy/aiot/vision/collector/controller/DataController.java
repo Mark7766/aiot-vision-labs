@@ -61,12 +61,6 @@ public class DataController {
         return "data";
     }
 
-    /** 触发一次即时采集（订阅模式下可作为测试）。 */
-    @PostMapping("/collect")
-    public String collectOnce() {
-        collectorService.collectDataOnce();
-        return "redirect:/data";
-    }
 
     /**
      * 单个 tag 历史页面。
