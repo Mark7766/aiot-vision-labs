@@ -112,11 +112,7 @@ body {
 
 .center-switch-label { font-size: .65rem; text-transform: uppercase; letter-spacing: 2px; color: var(--color-text-dim); margin-right: .5rem; }
 
-.container {
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: 1.6rem 1.4rem 2.4rem;
-}
+.container { max-width: 1580px; margin: 0 auto; padding: 1.6rem 1.4rem 2.4rem; }
 .header { text-align: center; margin: 0 0 1.8rem; }
 .header h1 { margin: 0 0 .4rem; font-size: 1.8rem; font-weight: 600; letter-spacing: .5px; }
 
@@ -267,6 +263,7 @@ a.button-link { @apply btn; }
 .hint { font-size:.7rem; color: var(--color-warn); margin-top:.6rem; }
 .metrics { margin-top:.6rem; color: var(--color-text); font-size:.75rem; letter-spacing:.5px; }
 .metrics small { color: var(--color-text-dim); }
+.metrics abbr { text-decoration: underline dotted; cursor: help; }
 
 /* Utility for fade-in */
 .fade-in { animation: fadeIn .4s ease; }
@@ -423,3 +420,7 @@ body:not(.edit-mode) .card .filter-pop { display:none !important; }
 /* 在非编辑模式下也隐藏 hover 显示动画（分页按钮除外） */
 body:not(.edit-mode) .card .dev-actions .btn-icon:not(.pager-prev):not(.pager-next) { opacity:0 !important; transform:scale(.7) !important; }
 body.edit-mode .card .dev-actions .btn-icon { opacity:1; transform:scale(1); }
+
+/* tag history specific wider layout */
+.tag-history-page .chart-wide { width:100%; }
+.tag-history-page .chart-wide-ctrl { max-width:100%; }

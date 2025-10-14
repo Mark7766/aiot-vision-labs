@@ -45,14 +45,15 @@
     </div>
 
     <div id="chartPanel" class="card chart-wrapper" style="padding:.5rem .6rem .6rem;">
-        <canvas id="histCanvas" style="width:100%;height:320px;display:block;background:#061a27;border:1px solid rgba(0,183,255,.15);border-radius:4px;"></canvas>
-        <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
+        <!-- ECharts container (replaces canvas) -->
+        <div id="histChart" style="width:100%;height:400px;background:#061a27;border:1px solid rgba(0,183,255,.15);border-radius:4px;"></div>
         <div class="legend">
             <span><i class="lg-box"></i> 历史</span>
             <span><i class="lg-box lg-box-forecast"></i> 预测</span>
         </div>
         <div id="chartHint" class="hint" style="display:none;">当前数据非数值型，无法绘制折线图，已自动切换到表格。</div>
         <div id="metricBox" class="metrics" style="display:none;"></div>
+        <div id="hoverReadout" style="margin-top:.35rem;font-size:.65rem;font-family:var(--font-mono);color:var(--color-text-dim);"></div>
     </div>
 
     <div id="tablePanel" class="card tbl-wrap" style="display:none;">
@@ -75,6 +76,9 @@
 
 <!-- Inject page data -->
 <script th:inline="javascript">window.__PAGE_DATA__={entries:/*[[${entries}]]*/[],deviceId:/*[[${device.id}]]*/0,tagId:/*[[${tagId}]]*/0,tagName:/*[[${tagName}]]*/''};</script>
-<script th:src="@{/js/tag-history.js}" src="/js/tag-history.js" defer></script>
+<!-- ECharts library -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" integrity="sha256-D2UOlne342XQI3/OvPjoH9cU6xw49AmwlLDbSvOUY+4=" crossorigin="anonymous"></script>
+<!-- New ECharts-based history script -->
+<script th:src="@{/js/tag-history-echarts.js}" src="/js/tag-history-echarts.js?v=20251014" defer></script>
 </body>
 </html>

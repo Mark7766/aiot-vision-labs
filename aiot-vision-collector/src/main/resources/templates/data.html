@@ -120,7 +120,7 @@
     </div>
 </div>
 
-<!-- 历史 / 预测 抽屉 (保持) -->
+<!-- 历史 / ���测 抽屉 (保持) -->
 <div id="drawerOverlay" class="drawer-overlay" aria-hidden="true">
     <div class="drawer" role="complementary" aria-label="历史与预测面板">
         <div class="drawer-header" style="gap:.6rem;">
@@ -134,7 +134,7 @@
         <div class="drawer-body">
             <div>
                 <div class="drawer-section-title">折线图</div>
-                <div class="chart-shell"><canvas id="drawerCanvas" style="width:100%;height:240px;display:block;"></canvas></div>
+                <div class="chart-shell"><canvas id="drawerCanvas" style="width:100%;height:240px;display:block;"></canvas><div id="drawerTooltip" class="chart-tooltip" style="display:none;"></div></div>
                 <div class="legend" style="margin-top:.35rem;">
                     <span><i class="lg-box"></i> 历史</span>
                     <span><i class="lg-box lg-box-forecast"></i> 预测</span>
@@ -305,6 +305,6 @@
 </div>
 
 <!-- External modular scripts -->
-<script th:src="@{/js/data-dashboard.js}" src="/js/data-dashboard.js" defer></script>
+<script th:src="@{/js/data-dashboard.js?v=20251013b}" src="/js/data-dashboard.js?v=20251013b" defer></script>
 </body>
 </html>

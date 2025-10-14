@@ -131,6 +131,10 @@ public class DataStorageServiceByIotdb implements DataStorageService {
             List<List<TSDataType>> typesList = new ArrayList<>();
             List<List<Object>> valuesList = new ArrayList<>();
             for (DataRecord record : dataRecords) {
+                if(null==record.getValue()){
+                    log.warn("Skipping record with null value: deviceId={}, tagId={}, timestamp={}", record.getDeviceId(), record.getTagId(), record.getTimestamp());
+                    continue;
+                }
                 String deviceIdStr = "root." + toDeviceId(record.getDeviceId());
                 deviceIds.add(deviceIdStr);
                 times.add(record.getTimestamp().toInstant(ZoneOffset.UTC).toEpochMilli());
