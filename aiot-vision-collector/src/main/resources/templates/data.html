@@ -31,7 +31,7 @@
     <!-- 设备卡片初始渲染，后续由 JS 重绘 -->
     <div class="card" th:each="dev : ${devices}" th:attr="data-device-id=${dev.deviceId},data-device-name=${dev.deviceName},data-device-protocol=${dev.protocol},data-device-conn=${dev.connectionString}">
         <div style="position:absolute;top:.35rem;right:.35rem;display:flex;gap:.35rem;">
-            <button type="button" class="delete-x btn-icon danger" title="删除设备" aria-label="删除设备" onclick="deleteDevice(this.closest('.card').dataset.deviceId,this);event.stopPropagation();">
+            <button type="button" class="delete-x btn-icon danger edit-only" title="删除设备" aria-label="删除设备" onclick="deleteDevice(this.closest('.card').dataset.deviceId,this);event.stopPropagation();">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M10 7V5h4v2m-7 0v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7M9 11v6M15 11v6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">删除设备</span>
             </button>
@@ -104,7 +104,7 @@
                 <td th:text="${tag.address}"></td>
                 <td style="font-family:var(--font-mono);" th:text="${tag.value}"></td>
             </tr>
-            <tr th:if="${#lists.isEmpty(dev.tags)}"><td colspan="3" class="text-warn" style="padding:.35rem .3rem;">暂无点位</td></tr>
+            <tr th:if="${#lists.isEmpty(dev.tags)}"><td colspan="3" class="text-dim" style="padding:.35rem .3rem;">暂无点位</td></tr>
             <tr th:if="${!#lists.isEmpty(dev.tags) and #lists.size(dev.tags) > 10}"><td colspan="3" class="text-dim" style="padding:.35rem .3rem;font-size:.6rem;">其余点位将在加载后可翻页查看...</td></tr>
             </tbody>
         </table>
@@ -120,12 +120,14 @@
     </div>
 </div>
 
-<!-- 历史 / ���测 抽屉 (保持) -->
+<!-- 历史 / 预测 抽屉 (合并界面) -->
 <div id="drawerOverlay" class="drawer-overlay" aria-hidden="true">
     <div class="drawer" role="complementary" aria-label="历史与预测面板">
+        <div id="drawerResizer" class="drawer-resizer" role="separator" aria-orientation="vertical" aria-label="调整宽度" tabindex="0"></div>
         <div class="drawer-header" style="gap:.6rem;">
             <h3 id="drawerTitle">历史趋势</h3>
             <span id="drawerUpdateTime"></span>
+            <!-- 移除模式分段控件，采用单一图表 + 预测叠加 -->
             <button class="btn-icon" type="button" title="关闭" aria-label="关闭" onclick="closeDrawer()">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">关闭</span>
@@ -134,23 +136,52 @@
         <div class="drawer-body">
             <div>
                 <div class="drawer-section-title">折线图</div>
-                <div class="chart-shell"><canvas id="drawerCanvas" style="width:100%;height:240px;display:block;"></canvas><div id="drawerTooltip" class="chart-tooltip" style="display:none;"></div></div>
-                <div class="legend" style="margin-top:.35rem;">
-                    <span><i class="lg-box"></i> 历史</span>
-                    <span><i class="lg-box lg-box-forecast"></i> 预测</span>
+                <div class="chart-shell" style="position:relative;">
+                  <canvas id="drawerCanvas" style="width:100%;height:240px;display:block;"></canvas>
+                  <div id="drawerTooltip" class="chart-tooltip" style="display:none;"></div>
+                  <div id="chartCrosshairV" class="chart-crosshair-v" style="display:none;"></div>
                 </div>
+                <!-- 图例 -->
+                <div id="chartLegend" style="display:flex;gap:1rem;margin:.4rem 0 .2rem;font-size:.65rem;">
+                  <div data-ser="hist" style="display:flex;align-items:center;gap:.35rem;">
+                    <span style="display:inline-block;width:14px;height:3px;background:#00bfff;border-radius:2px;"></span>
+                    <span>历史</span>
+                  </div>
+                  <div data-ser="pred" id="legendPred" role="button" tabindex="0" aria-pressed="true" aria-label="切换预测曲线显示" style="display:none;align-items:center;gap:.35rem;">
+                    <span style="display:inline-block;width:14px;height:3px;background:linear-gradient(90deg,#ffa500,#ffbf40);border-radius:2px;position:relative;overflow:hidden;"></span>
+                    <span>预测</span>
+                  </div>
+                </div>
+                <div id="compareInfo" class="compare-info" style="display:none;"></div>
                 <div id="drawerHint" class="hint" style="display:none;">当前数据非数值型或为空，显示下方表格。</div>
                 <div class="pred-btn-row">
-                    <button id="predictBtn" type="button" class="btn-icon" title="预测" aria-label="预测" onclick="doPredictInDrawer()">
+                    <button id="predictBtn" type="button" class="btn-icon" title="生成 / 刷新预测 (叠加显示)" aria-label="生成预测" onclick="doPredictInDrawer()">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15l4-5 4 6 4-8 4 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         <span class="visually-hidden">预测</span>
                     </button>
                     <span id="predictStatus" class="text-dim" style="display:none;font-size:.65rem;">预测中...</span>
                 </div>
                 <div id="metricBox" class="metrics" style="display:none;"></div>
+                <div id="compareTableOuter" style="margin-top:.5rem;">
+                  <div id="compareCollapseHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="compareTableWrap" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:.25rem .4rem;background:#0e2732;border:1px solid var(--color-border);border-radius:6px;" onclick="toggleCompareCollapse()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCompareCollapse();}">
+                    <div class="drawer-section-title" style="margin:0;">历史 vs 预测 对比</div>
+                    <div style="font-size:.55rem;color:var(--color-text-dim);display:flex;align-items:center;gap:.35rem;">
+                      <span id="compareCount" style="font-size:.55rem;"></span>
+                      <span id="compareCollapseIcon">▼</span>
+                    </div>
+                  </div>
+                  <div id="compareTableWrap" style="display:none;margin-top:.35rem;">
+                    <div style="max-height:180px;overflow:auto;border:1px solid var(--color-border);border-radius:6px;background:#0b1d26;">
+                      <table class="small-table" style="font-size:.65rem;">
+                        <thead><tr><th>预测时间</th><th>预测值</th><th>历史时间</th><th>历史值</th><th>差值</th><th>差异%</th></tr></thead>
+                        <tbody id="compareTBody"><tr><td colspan="6" class="text-dim" style="padding:4px;">暂无数据</td></tr></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
             </div>
             <div>
-                <div class="drawer-section-title">最新数据 (升序)</div>
+                <div class="drawer-section-title">最新数据 (倒序)</div>
                 <div style="max-height:240px;overflow:auto;border:1px solid var(--color-border);border-radius:6px;">
                     <table class="small-table">
                         <thead><tr><th style="width:55%;">时间</th><th style="width:45%;">值</th></tr></thead>
@@ -167,7 +198,7 @@
     <div class="modal-wrapper" role="document">
         <div class="modal-header">
             <h3>添加设备</h3>
-            <button class="btn-icon" type="button" title="关闭" aria-label="��闭" onclick="closeAddDeviceModal()">
+            <button class="btn-icon" type="button" title="关闭" aria-label="关闭" onclick="closeAddDeviceModal()">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">关闭</span>
             </button>
@@ -239,36 +270,47 @@
     </div>
 </div>
 
-<!-- Namespace Modal: 用于选择 namespace 并添加点位 -->
-<div id="namespaceModal" style="display:none;">
-    <div class="ns-wrapper">
-        <div class="ns-header">
-            <h2>浏览 Namespaces 并添加点位</h2>
-            <div style="display:flex;gap:.6rem;align-items:center;">
-                <span id="nsSelectedLabel" class="text-dim" style="font-size:.6rem;"></span>
-                <button onclick="closeNsModal()" class="btn-icon" title="关闭" aria-label="关闭">
+<!-- Namespace Modal (Redesigned) -->
+<div id="namespaceModal" class="modal-overlay" aria-hidden="true" role="dialog" aria-modal="true" style="display:none;">
+    <div class="modal-wrapper" style="max-width:920px;width:92%;display:flex;flex-direction:column;gap:.8rem;min-height:420px;">
+        <div class="modal-header" style="margin-bottom:.2rem;">
+            <h3 style="margin:0;">添加点位</h3>
+            <div style="display:flex;align-items:center;gap:.6rem;">
+                <span id="nsSelectedLabel" class="text-dim" style="font-size:.6rem;letter-spacing:.5px;min-height:1em;">未选择命名空间</span>
+                <button type="button" class="btn-icon" title="关闭" aria-label="关闭" onclick="closeNsModal()">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     <span class="visually-hidden">关闭</span>
                 </button>
             </div>
         </div>
-        <div class="ns-columns">
-            <div class="ns-left">
-                <h3 style="margin:0 0 .4rem 0;font-size:.65rem;letter-spacing:.5px;color:var(--color-text-dim);text-transform:uppercase;">Namespaces</h3>
-                <ul id="nsList"></ul>
-            </div>
-            <div class="ns-right">
-                <div class="ns-tags-head">
-                    <div style="font-weight:500;letter-spacing:.5px;">Namespace 下 Tags (点击添加)</div>
-                    <div class="ns-status" id="nsStatus"></div>
+        <div class="ns-columns" style="flex:1;display:flex;gap:1rem;min-height:0;">
+            <div class="ns-left" style="flex:0 0 260px;display:flex;flex-direction:column;min-height:0;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 .35rem;">
+                    <div style="font-size:.6rem;letter-spacing:1px;text-transform:uppercase;color:var(--color-text-dim);">Namespaces</div>
+                    <div id="nsListStatus" style="font-size:.55rem;color:var(--color-text-dim);"></div>
                 </div>
-                <div class="ns-tags-container">
-                    <table>
-                        <thead><tr><th style="width:25%;">名称</th><th style="width:35%;">地址</th><th style="width:20%;">值</th><th style="width:20%;">操作</th></tr></thead>
-                        <tbody id="nsTagBody"><tr><td colspan="4" class="ns-empty">请选择左侧 Namespace</td></tr></tbody>
+                <ul id="nsList" style="list-style:none;margin:0;padding:0;flex:1;overflow:auto;border:1px solid var(--color-border);border-radius:8px;background:#0f2533;">
+                    <li class="text-dim" style="padding:.6rem;font-size:.65rem;">加载中...</li>
+                </ul>
+            </div>
+            <div class="ns-right" style="flex:1;display:flex;flex-direction:column;min-width:340px;min-height:0;">
+                <div class="ns-tags-head" style="display:flex;align-items:center;justify-content:space-between;margin:0 0 .35rem;">
+                    <div style="font-size:.6rem;letter-spacing:1px;text-transform:uppercase;color:var(--color-text-dim);">Tags</div>
+                    <div id="nsStatus" class="text-dim" style="font-size:.55rem;min-height:1em;"></div>
+                </div>
+                <div class="ns-tags-container" style="flex:1;overflow:auto;border:1px solid var(--color-border);border-radius:8px;background:#0f2533;">
+                    <table style="width:100%;border-collapse:collapse;font-size:.68rem;">
+                        <thead><tr><th style="text-align:left;padding:6px 8px;width:30%;">名称</th><th style="text-align:left;padding:6px 8px;width:38%;">地址</th><th style="text-align:left;padding:6px 8px;width:18%;">值</th><th style="text-align:right;padding:6px 8px;width:14%;">操作</th></tr></thead>
+                        <tbody id="nsTagBody"><tr><td colspan="4" class="text-dim" style="padding:.7rem .6rem;">左侧选择命名空间</td></tr></tbody>
                     </table>
                 </div>
             </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.3rem;">
+            <button type="button" class="btn-icon" onclick="closeNsModal()" title="关闭" aria-label="关闭">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="visually-hidden">关闭</span>
+            </button>
         </div>
     </div>
 </div>
@@ -298,13 +340,12 @@
         </div>
     </div>
 </div>
-
 <!-- FAB 悬浮操作按钮 (简化：直接添加设备) -->
 <div class="fab-container" id="fab">
     <button class="fab-main" id="fabMain" type="button" aria-label="添加设备" onclick="openAddDeviceModal()">＋</button>
 </div>
 
 <!-- External modular scripts -->
-<script th:src="@{/js/data-dashboard.js?v=20251013b}" src="/js/data-dashboard.js?v=20251013b" defer></script>
+<script th:src="@{/js/data-dashboard.js?v=20251015e}" src="/js/data-dashboard.js?v=20251015e" defer></script>
 </body>
 </html>

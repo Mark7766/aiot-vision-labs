@@ -27,34 +27,62 @@ import java.util.*;
 @Profile("!test")
 @Slf4j
 public class DataStorageServiceByIotdb implements DataStorageService {
-
     private Session session;
 
-    @Value("${iotdb.host}") private String host;
-    @Value("${iotdb.port}") private int port;
-    @Value("${iotdb.username}") private String username;
-    @Value("${iotdb.password}") private String password;
+    @Value("${iotdb.host}")
+    private String host;
+    @Value("${iotdb.port}")
+    private int port;
+    @Value("${iotdb.username}")
+    private String username;
+    @Value("${iotdb.password}")
+    private String password;
+    @Value("${iotdb.rt.db}")
+    private  String realtimeDBwithoutRoot;
+    private  String realtimeDB;
+    @Value("${iotdb.rt.ttl}")
+    private  long realtimeTTL ;
 
     @PostConstruct
     public void init() {
         this.session = new Session(host, port, username, password);
-        try { session.open(false); log.info("IoTDB session connected successfully. host={} port={}", host, port);
+        try {
+            session.open(false);
+            log.info("IoTDB session connected successfully. host={} port={}", host, port);
+            setTTL();
+        } catch (Exception e) {
+            log.error("Failed to connect to IoTDB host={} port={}", host, port, e);
+            throw new IllegalStateException("IoTDB connection failed", e);
         }
-        catch (Exception e) { log.error("Failed to connect to IoTDB host={} port={}", host, port, e); throw new IllegalStateException("IoTDB connection failed", e); }
+    }
+
+    private void setTTL() {
+        try {
+            this.realtimeDB="root."+realtimeDBwithoutRoot;
+            String sql = String.format("set ttl to %s %d", realtimeDB,realtimeTTL);
+            session.executeNonQueryStatement(sql);
+            log.info("TTL set to {} ms for database {}", realtimeTTL,realtimeDB);
+        } catch (Exception e) {
+            log.error("Error setting TTL for database {}", realtimeDB, e);
+        }
     }
 
     @PreDestroy
     public void destroy() {
         if (session != null) {
-            try { session.close(); log.info("IoTDB session closed."); }
-            catch (IoTDBConnectionException e) { log.warn("Error closing IoTDB session: {}", e.getMessage()); }
+            try {
+                session.close();
+                log.info("IoTDB session closed.");
+            } catch (IoTDBConnectionException e) {
+                log.warn("Error closing IoTDB session: {}", e.getMessage());
+            }
         }
     }
 
     @Override
     public List<DataRecord> findLatest(Long deviceId) {
         List<DataRecord> records = new ArrayList<>();
-        String sql = String.format("SELECT last * FROM root.%s.*", toDeviceId(deviceId));
+        String sql = String.format("SELECT last * FROM " + realtimeDB + ".%s.*", toDeviceId(deviceId));
         try (var dataSet = session.executeQueryStatement(sql)) {
             while (dataSet.hasNext()) {
                 RowRecord record = dataSet.next();
@@ -66,14 +94,16 @@ public class DataStorageServiceByIotdb implements DataStorageService {
                 Long tagId = Long.parseLong(tagIdStr);
                 records.add(DataRecord.builder().tagId(tagId).deviceId(deviceId).value(value).timestamp(LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)).build());
             }
-        } catch (Exception e) { log.error("Error querying latest data for device {}", deviceId, e); }
+        } catch (Exception e) {
+            log.error("Error querying latest data for device {}", deviceId, e);
+        }
         return records;
     }
 
     @Override
     public Optional<DataRecord> findLatest(Long deviceId, Long tagId) {
         DataRecord dataRecord = null;
-        String sql = String.format("SELECT last %s FROM root.%s", toMeasurement(tagId), toDeviceId(deviceId));
+        String sql = String.format("SELECT last %s FROM " + realtimeDB + ".%s", toMeasurement(tagId), toDeviceId(deviceId));
         try (var dataSet = session.executeQueryStatement(sql)) {
             while (dataSet.hasNext()) {
                 RowRecord record = dataSet.next();
@@ -82,14 +112,16 @@ public class DataStorageServiceByIotdb implements DataStorageService {
                 Object value = convertFieldToValue(field);
                 dataRecord = DataRecord.builder().tagId(tagId).deviceId(deviceId).value(value).timestamp(LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)).build();
             }
-        } catch (Exception e) { log.error("Error querying latest for device {} tag {}", deviceId, tagId, e); }
+        } catch (Exception e) {
+            log.error("Error querying latest for device {} tag {}", deviceId, tagId, e);
+        }
         return Optional.ofNullable(dataRecord);
     }
 
     @Override
     public List<DataRecord> findTopN(Long deviceId, Long tagId, int limit) {
         List<DataRecord> records = new ArrayList<>();
-        String sql = String.format("SELECT %s FROM root.%s ORDER BY time DESC LIMIT %d", toMeasurement(tagId), toDeviceId(deviceId), limit);
+        String sql = String.format("SELECT %s FROM " + realtimeDB + ".%s ORDER BY time DESC LIMIT %d", toMeasurement(tagId), toDeviceId(deviceId), limit);
         try (var dataSet = session.executeQueryStatement(sql)) {
             while (dataSet.hasNext()) {
                 RowRecord record = dataSet.next();
@@ -98,14 +130,16 @@ public class DataStorageServiceByIotdb implements DataStorageService {
                 Object value = convertFieldToValue(field);
                 records.add(DataRecord.builder().tagId(tagId).deviceId(deviceId).value(value).timestamp(LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)).build());
             }
-        } catch (Exception e) { log.error("Error querying top N for device {} tag {}", deviceId, tagId, e); }
+        } catch (Exception e) {
+            log.error("Error querying top N for device {} tag {}", deviceId, tagId, e);
+        }
         return records;
     }
 
     @Override
     public List<DataRecord> findTopN(Long deviceId, int limit) {
         List<DataRecord> records = new ArrayList<>();
-        String sql = String.format("SELECT * FROM root.%s.* ORDER BY time DESC LIMIT %d", toDeviceId(deviceId), limit);
+        String sql = String.format("SELECT * FROM " + realtimeDB + ".%s.* ORDER BY time DESC LIMIT %d", toDeviceId(deviceId), limit);
         try (var dataSet = session.executeQueryStatement(sql)) {
             while (dataSet.hasNext()) {
                 RowRecord record = dataSet.next();
@@ -117,13 +151,17 @@ public class DataStorageServiceByIotdb implements DataStorageService {
                 Long tagId = Long.parseLong(tagIdStr);
                 records.add(DataRecord.builder().tagId(tagId).deviceId(deviceId).value(value).timestamp(LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)).build());
             }
-        } catch (Exception e) { log.error("Error querying top N for device {}", deviceId, e); }
+        } catch (Exception e) {
+            log.error("Error querying top N for device {}", deviceId, e);
+        }
         return records;
     }
 
     @Override
     public boolean save(List<DataRecord> dataRecords) {
-        if (dataRecords.isEmpty()) { return true; }
+        if (dataRecords.isEmpty()) {
+            return true;
+        }
         try {
             List<String> deviceIds = new ArrayList<>();
             List<Long> times = new ArrayList<>();
@@ -131,11 +169,11 @@ public class DataStorageServiceByIotdb implements DataStorageService {
             List<List<TSDataType>> typesList = new ArrayList<>();
             List<List<Object>> valuesList = new ArrayList<>();
             for (DataRecord record : dataRecords) {
-                if(null==record.getValue()){
+                if (null == record.getValue()) {
                     log.warn("Skipping record with null value: deviceId={}, tagId={}, timestamp={}", record.getDeviceId(), record.getTagId(), record.getTimestamp());
                     continue;
                 }
-                String deviceIdStr = "root." + toDeviceId(record.getDeviceId());
+                String deviceIdStr = realtimeDB + "." + toDeviceId(record.getDeviceId());
                 deviceIds.add(deviceIdStr);
                 times.add(record.getTimestamp().toInstant(ZoneOffset.UTC).toEpochMilli());
                 List<String> measurements = List.of(toMeasurement(record.getTagId()));
@@ -148,11 +186,19 @@ public class DataStorageServiceByIotdb implements DataStorageService {
             session.insertRecords(deviceIds, times, measurementsList, typesList, valuesList);
             log.debug("Saved {} records to IoTDB", dataRecords.size());
             return true;
-        } catch (Exception e) { log.error("Error saving records to IoTDB", e); return false; }
+        } catch (Exception e) {
+            log.error("Error saving records to IoTDB", e);
+            return false;
+        }
     }
 
-    private String toDeviceId(Long deviceId) { return "d" + deviceId; }
-    private String toMeasurement(Long tagId) { return "m" + tagId; }
+    private String toDeviceId(Long deviceId) {
+        return "d" + deviceId;
+    }
+
+    private String toMeasurement(Long tagId) {
+        return "m" + tagId;
+    }
 
     private TSDataType getTSDataType(Object value) {
         if (value instanceof Boolean) return TSDataType.BOOLEAN;
