@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  aiot_vision_collector:
+    image: avc-server:1.0.0-rc7
+    container_name: avc-server
+    ports:
+      - "8080:8080"
+    environment:
+      # ⚠️ 注意: 在 Docker Compose 默认网络中，服务之间可以直接通过服务名互相访问。
+      # 因此，AVC_IOTDB_HOST 可以直接指向 iotdb 服务名。
+      # 但如果 iotdb 使用了 host 网络，则可能需要使用宿主机IP。
+      # 在这里，我们假设使用默认网络，并让 iotdb 服务使用默认桥接网络。
+      # 如果 iotdb 确实需要 host 网络，请调整 AVC_IOTDB_HOST 为宿主机IP。
+      AVC_IOTDB_HOST: iotdb
+      AVC_PREDICT_API_URL: http://avc-forecast:50000/predict
+    volumes:
+      - /home/mark/data/avc:/app/data
+    restart: always
+    depends_on:
+      - iotdb
+      - iot_forecast
+
+  iotdb:
+    image: apache/iotdb:2.0.5-standalone
+    container_name: iotdb
+    # ⚠️ 特别注意:
+    # `network_mode: host` 在 Docker Compose 中通常用于需要访问宿主机网络的服务。
+    # 这会使容器共享宿主机的网络堆栈，容器内部的端口直接映射到宿主机端口，
+    # 且与其他容器的隔离性较差。
+    # 除非你有特殊需求，否则建议使用默认桥接网络，并进行端口映射。
+    # 如果你必须使用 host 网络，那么 iotdb 将无法通过服务名被 avc 访问。
+    ports:
+      - "6667:6667"  # 当使用 host network_mode 时，此端口映射会被忽略，但保留以作说明。
+    restart: always
+
+  iot_forecast:
+    image: avc-forecast:1.0.0-rc7
+    container_name: iot_forecast
+    ports:
+      - "50000:50000"
+    restart: always
+

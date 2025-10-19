@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 public interface CollectorService {
-    List<NamespaceVO> getNameSpaces(Device device) throws ExecutionException, InterruptedException;
+    List<NamespaceVO> getNameSpaces(Device device) throws Exception;
     List<TagValueVO> getTagsByDeviceAndNamespace(Device device, NamespaceVO namespaceVO) throws Exception;
 }
 

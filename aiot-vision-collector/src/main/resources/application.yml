@@ -35,7 +35,7 @@ data:
 
 # IoTDB 连接配置
 iotdb:
-  host: ${AVC_IOTDB_HOST:10.235.229.11}
+  host: ${AVC_IOTDB_HOST:127.0.0.1}
   port: ${AVC_IOTDB_PORT:6667}
   username: ${AVC_IOTDB_USERNAME:root}
   password: ${AVC_IOTDB_PASSWORD:root}
