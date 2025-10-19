@@ -3,139 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <title>AIoT Vision Collector</title>
-    <style>
-        /* 工业科技风：深灰蓝调、金属纹理、网格布局 */
-        body {
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: #e0e0e0;
-            font-family: 'Courier New', monospace;
-            margin: 0;
-            padding: 0;
-        }
-
-        .navbar {
-            background: rgba(0, 0, 0, 0.8);
-            padding: 1rem;
-            text-align: center;
-            border-bottom: 2px solid #00bfff;
-        }
-
-        .navbar a {
-            color: #00bfff;
-            margin: 0 1rem;
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        .navbar a:hover {
-            text-shadow: 0 0 10px #00bfff;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 2rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-
-        h1, h2, h3 {
-            color: #00bfff;
-            border-bottom: 1px solid #00bfff;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1rem;
-        }
-
-        .card {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid #00bfff;
-            border-radius: 8px;
-            padding: 1rem;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            transition: transform 0.3s;
-        }
-
-        .card:hover {
-            transform: scale(1.02);
-            box-shadow: 0 0 20px rgba(0, 191, 255, 0.5);
-        }
-
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        input, select, button {
-            padding: 0.5rem;
-            border: 1px solid #00bfff;
-            background: rgba(0, 0, 0, 0.5);
-            color: #e0e0e0;
-            border-radius: 4px;
-        }
-
-        button {
-            background: #00bfff;
-            color: #000;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        button:hover {
-            background: #0099cc;
-        }
-
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-
-        li {
-            background: rgba(0, 191, 255, 0.1);
-            margin: 0.5rem 0;
-            padding: 0.5rem;
-            border-left: 3px solid #00bfff;
-        }
-
-        pre {
-            background: #000;
-            padding: 1rem;
-            border-radius: 4px;
-            overflow-x: auto;
-            font-size: 0.9em;
-        }
-
-        a.button-link {
-            display: inline-block;
-            padding: 0.4rem 0.8rem;
-            background: #00bfff;
-            color: #000;
-            border-radius: 4px;
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        a.button-link:hover {
-            background: #0099cc;
-        }
-    </style>
+    <link rel="stylesheet" th:href="@{/css/app.css}" href="/css/app.css" />
+    <!-- Shared utilities -->
+    <script th:src="@{/js/common.js}" src="/js/common.js" defer></script>
+    <script>
+        // No section highlighting needed; minimalist design
+    </script>
 </head>
 <body>
-<nav class="navbar">
-    <a href="/devices">设备配置</a>
-    <a href="/data">数据展示</a>
+<nav class="navbar" style="justify-content:space-between;">
+    <a href="/" class="navbar-brand" title="主页">AIoT Vision</a>
+    <div style="flex:1 0 auto;"></div>
 </nav>
-<div class="container">
+<div class="container fade-in">
     <th:block th:replace="${content}"></th:block>
 </div>
+<div class="footer-spacer"></div>
 </body>
 </html>

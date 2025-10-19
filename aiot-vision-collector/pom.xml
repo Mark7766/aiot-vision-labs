@@ -6,19 +6,28 @@
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>3.5.6</version>
-		<relativePath/> <!-- lookup parent from repository -->
+		<relativePath/>
 	</parent>
 	<groupId>com.sandy</groupId>
 	<artifactId>aiot-vision-collector</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>aiot-vision-collector</name>
+	<description>AIoT Vision Collector</description>
 	<properties>
 		<java.version>17</java.version>
-		<plc4x.version>0.13.1</plc4x.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<milo.version>0.6.13</milo.version>
-		<djl.version>0.34.0</djl.version>
+		<lombok.version>1.18.40</lombok.version>
+		<iotdb.session.version>2.0.5</iotdb.session.version>
+		<springdoc.version>2.6.0</springdoc.version>
 	</properties>
 	<dependencies>
+
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>${springdoc.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-thymeleaf</artifactId>
@@ -39,73 +48,25 @@
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<version>1.18.40</version>
+			<version>${lombok.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.iotdb</groupId>
+			<artifactId>iotdb-session</artifactId>
+			<version>${iotdb.session.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.eclipse.milo</groupId>
+			<artifactId>sdk-client</artifactId>
+			<version>${milo.version}</version>
+			<optional>true</optional>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<dependency>
-			<groupId>org.apache.plc4x</groupId>
-			<artifactId>plc4j-api</artifactId>
-			<version>${plc4x.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.plc4x</groupId>
-			<artifactId>plc4j-driver-modbus</artifactId>
-			<version>${plc4x.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.plc4x</groupId>
-			<artifactId>plc4j-driver-opcua</artifactId>
-			<version>${plc4x.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.plc4x</groupId>
-			<artifactId>plc4j-scraper</artifactId>
-			<version>${plc4x.version}</version>
-		</dependency>
-		<!-- Jackson for JSON -->
-		<dependency>
-			<groupId>com.fasterxml.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
-		</dependency>
-		<!-- Eclipse Milo 仅用于测试（例如端点列举），生产采集逻辑已移除 -->
-		<dependency>
-			<groupId>org.eclipse.milo</groupId>
-			<artifactId>sdk-client</artifactId>
-			<version>${milo.version}</version>
-<!--			<scope>test</scope>-->
-			<optional>true</optional>
-		</dependency>
-		<dependency>
-			<groupId>ai.djl.timeseries</groupId>
-			<artifactId>timeseries</artifactId>
-			<version>${djl.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>ai.djl</groupId>
-			<artifactId>api</artifactId>
-			<version>${djl.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>ai.djl.mxnet</groupId>
-			<artifactId>mxnet-engine</artifactId>
-			<version>${djl.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>ai.djl.mxnet</groupId>
-			<artifactId>mxnet-model-zoo</artifactId>
-			<version>${djl.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>com.microsoft.onnxruntime</groupId>
-			<artifactId>onnxruntime</artifactId>
-			<version>1.18.0</version>
-		</dependency>
 	</dependencies>
-
 	<build>
 		<plugins>
 			<plugin>
@@ -116,6 +77,7 @@
 						<path>
 							<groupId>org.projectlombok</groupId>
 							<artifactId>lombok</artifactId>
+							<version>${lombok.version}</version>
 						</path>
 					</annotationProcessorPaths>
 				</configuration>
@@ -134,5 +96,4 @@
 			</plugin>
 		</plugins>
 	</build>
-
 </project>

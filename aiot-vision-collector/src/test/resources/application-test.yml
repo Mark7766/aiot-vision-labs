@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+logging:
+  level:
+    root: WARN
+    com.sandy.aiot.vision.collector: INFO
+predict:
+  api:
+    prediction-length: 5
+    history-length: 30
+
+data:
+  api:
+    history-limit: 50
+  view:
+    latest-minutes-window: 2
+  tag-history:
+    default-minutes: 3
