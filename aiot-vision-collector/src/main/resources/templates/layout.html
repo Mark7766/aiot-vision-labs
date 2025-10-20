@@ -8,11 +8,38 @@
     <script th:src="@{/js/common.js}" src="/js/common.js" defer></script>
     <script>
         // No section highlighting needed; minimalist design
+        // Secret API button reveal logic: type sequence "a" "p" "i" within 1.5s to reveal
+        (function(){
+            const seq = ['a','p','i'];
+            let buffer = [];
+            let timer = null;
+            function reset(){ buffer = []; }
+            document.addEventListener('keydown', function(e){
+                if(!e.key) return;
+                const k = e.key.toLowerCase();
+                if(k.length === 1){
+                    buffer.push(k);
+                    if(buffer.length > seq.length) buffer.shift();
+                    if(seq.every((c,i)=>buffer[i]===c)){
+                        const btn = document.getElementById('secretApiBtn');
+                        if(btn && btn.style.display === 'none'){
+                            btn.style.display = 'inline-flex';
+                            btn.classList.add('fade-in');
+                            btn.setAttribute('aria-hidden','false');
+                        }
+                    }
+                    clearTimeout(timer);
+                    timer = setTimeout(reset,1500);
+                }
+            });
+        })();
     </script>
 </head>
 <body>
 <nav class="navbar" style="justify-content:space-between;">
     <a href="/" class="navbar-brand" title="主页">AIoT Vision</a>
+    <!-- Hidden secret API access (Easter egg) -->
+    <a id="secretApiBtn" href="/swagger-ui/index.html" target="_blank" rel="noopener" aria-hidden="true" style="display:none;font-size:.55rem;padding:.18rem .45rem;border:1px solid var(--color-border);border-radius:5px;background:#0d222d;color:var(--color-text-dim);text-decoration:none;align-items:center;gap:.25rem;">API</a>
     <div style="flex:1 0 auto;"></div>
 </nav>
 <div class="container fade-in">
