@@ -1,15 +1,19 @@
 package com.sandy.aiot.vision.collector.tools;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.AbstractMap.SimpleEntry;
 
+/**
+ * Utility class for parsing OPC UA connection strings.
+ */
 public class OpcuaUriParser {
 
     /**
-     * 从OPC UA连接字符串中提取IP地址和端口。
+     * Extracts the IP address and port from an OPC UA connection string.
      *
-     * @param connectionString 包含opc.tcp://协议的连接字符串，例如："opc.tcp://127.0.0.1:53530/OPCUA/SimulationServer"
-     * @return 包含IP地址（主机名）和端口的SimpleEntry对象。如果解析失败，返回null。
+     * @param connectionString The connection string containing the opc.tcp:// protocol, e.g., "opc.tcp://127.0.0.1:53530/OPCUA/SimulationServer"
+     * @return A SimpleEntry object containing the IP address (hostname) and port. Returns null if parsing fails.
      */
     public static SimpleEntry<String, Integer> extractIpAndPort(String connectionString) {
         try {
@@ -33,10 +37,10 @@ public class OpcuaUriParser {
         if (result != null) {
             String ip = result.getKey();
             int port = result.getValue();
-            System.out.println("提取出的IP地址: " + ip);
-            System.out.println("提取出的端口: " + port);
+            System.out.println("Extracted IP address: " + ip);
+            System.out.println("Extracted port: " + port);
         } else {
-            System.out.println("无法从字符串中提取IP地址和端口。");
+            System.out.println("Unable to extract IP address and port from the string.");
         }
     }
 }
