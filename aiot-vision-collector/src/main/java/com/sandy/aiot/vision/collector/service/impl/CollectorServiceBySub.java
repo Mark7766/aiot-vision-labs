@@ -216,7 +216,7 @@ public class CollectorServiceBySub implements CollectorService {
                     .value(value)
                     .timestamp(toLocalDateTimeWithSystemZone(val.getSourceTime()))
                     .build();
-            log.debug("DataRecord: {}", dataRecord.toString());
+            log.debug("DataRecordgi: {}", dataRecord.toString());
             dataStorageService.save(List.of(dataRecord));
         } catch (Exception e) {
             log.warn("Failed to process subscription callback: {}", e.getMessage());
