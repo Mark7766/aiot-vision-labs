@@ -337,7 +337,8 @@ public class DataController {
                 }
             }
             view.setTimestamp(latestTs==null?"":TS_FMT.format(latestTs));
-            boolean ok = latestTs!=null && java.time.Duration.between(latestTs, now).toMinutes() < minutesWindow + 1;
+//            boolean ok = latestTs!=null && java.time.Duration.between(latestTs, now).toMinutes() < minutesWindow + 1;
+            boolean ok=collectorService.isConnectionOk(d);
             view.setConnectionOk(ok);
             result.add(view);
         }
