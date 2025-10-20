@@ -200,6 +200,9 @@ public class CollectorServiceBySub implements CollectorService {
             Tag tag = NODE_TAG_MAP.get(item.getReadValueId().getNodeId());
             if (tag == null || tag.getDevice() == null) return;
             Object value = val.getValue() == null ? null : val.getValue().getValue();
+            if(value instanceof Short){
+                value = ((Short) value).intValue();
+            }
             DataRecord dataRecord = DataRecord.builder().deviceId(tag.getDevice().getId()).tagId(tag.getId()).value(value).timestamp(LocalDateTime.now()).build();
             log.debug("dataRecord:{}", dataRecord.toString());
             dataStorageService.save(List.of(dataRecord));
