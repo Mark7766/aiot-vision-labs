@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   aiot_vision_collector:
-    image: avc-server:1.0.0-rc7
+    image: mark924/avc-server:1.0.0-rc8
     container_name: avc-server
     ports:
       - "8080:8080"
@@ -35,7 +35,7 @@ services:
     restart: always
 
   iot_forecast:
-    image: avc-forecast:1.0.0-rc7
+    image: mark924/avc-forecast:1.0.0-rc8
     container_name: iot_forecast
     ports:
       - "50000:50000"
