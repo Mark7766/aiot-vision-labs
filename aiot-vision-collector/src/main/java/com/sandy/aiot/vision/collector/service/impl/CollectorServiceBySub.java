@@ -17,6 +17,7 @@ import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfig;
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem;
+import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription;
 import org.eclipse.milo.opcua.sdk.client.nodes.UaNode;
 import org.eclipse.milo.opcua.stack.client.DiscoveryClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
@@ -37,11 +38,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.*;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -54,15 +51,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CollectorServiceBySub implements CollectorService {
 
     private static final AtomicInteger MONITORED_ITEM_CLIENT_HANDLE = new AtomicInteger(1);
-    private static final long TOO_MANY_SESSIONS_BACKOFF_MS = TimeUnit.SECONDS.toMillis(30);
 
     private final DeviceRepository deviceRepository;
-    private final TagRepository tagRepository;
     private final DataStorageService dataStorageService;
 
     private final Map<Long, OpcUaClient> opcUaClients = new ConcurrentHashMap<>();
-    private final Map<Long, Long> deviceBackoffUntil = new ConcurrentHashMap<>();
-    private static final Map<NodeId, Tag> NODE_TAG_MAP = new ConcurrentHashMap<>();
+    private static final Map<Long,Map<NodeId, Tag>> DEVICE_NODE_TAG_MAP = new ConcurrentHashMap<>();
+    private static final Map<Long,Map<NodeId, UaSubscription>> DEVICE_NODE_SUB_MAP = new ConcurrentHashMap<>();
 
     @PreDestroy
     public void shutdown() {
@@ -103,7 +98,6 @@ public class CollectorServiceBySub implements CollectorService {
                 // Create client configuration
                 OpcUaClientConfigBuilder configBuilder = OpcUaClientConfig.builder()
                         .setEndpoint(endpoint);
-
                 // Create and connect the client
                 OpcUaClient c = OpcUaClient.create(configBuilder.build());
                 c.connect().get();
@@ -131,37 +125,70 @@ public class CollectorServiceBySub implements CollectorService {
         }
     }
 
-    private boolean isInBackoff(Device device) {
-        Long until = deviceBackoffUntil.get(device.getId());
-        return until != null && System.currentTimeMillis() < until;
-    }
-
-    private void applyBackoff(Device device) {
-        long until = System.currentTimeMillis() + TOO_MANY_SESSIONS_BACKOFF_MS;
-        deviceBackoffUntil.put(device.getId(), until);
-        log.warn("Device {} is rate-limited, pausing data collection for {} ms", device.getName(), TOO_MANY_SESSIONS_BACKOFF_MS);
-    }
-
     @Scheduled(fixedRate = 1000)
-    public void collectData() {
+    public void collectData() throws Exception {
         doSub();
     }
 
-    private void doSub() {
+    private void doSub() throws Exception {
         List<Device> devices = deviceRepository.findAllWithTags();
         if (devices.isEmpty()) {
+            if(!DEVICE_NODE_SUB_MAP.isEmpty()){
+                cancelAllSubscription();
+                shutdown();
+                DEVICE_NODE_TAG_MAP.clear();
+                DEVICE_NODE_SUB_MAP.clear();
+            }
             return;
         }
         for (Device device : devices) {
-            if (isInBackoff(device)) {
-                continue;
-            }
             List<Tag> tags = device.getTags();
             if (tags == null || tags.isEmpty()) {
+                cancelSubscription(device);
                 continue;
             }
             if (isOpcUa(device.getConnectionString())) {
                 doSubOpcUaCollect(device, tags);
+            }
+        }
+       List<Device> delDevices=new ArrayList<>();
+        DEVICE_NODE_SUB_MAP.forEach((deviceId,map)->{
+            Device device = Device.builder().id(deviceId).build();
+            if(!devices.contains(device)){
+                delDevices.add(device);
+            }
+        });
+        for (Device delDevice : delDevices) {
+            cancelSubscription(delDevice);
+            DEVICE_NODE_TAG_MAP.remove(delDevice.getId());
+        }
+
+    }
+
+    private void cancelSubscription(Device delDevice) throws Exception {
+        Long deviceId = delDevice.getId();
+        if(DEVICE_NODE_SUB_MAP.containsKey(deviceId)){
+            Map<NodeId, UaSubscription> map = DEVICE_NODE_SUB_MAP.remove(deviceId);
+            for (Map.Entry<NodeId, UaSubscription> entry : map.entrySet()) {
+                NodeId nodeId = entry.getKey();
+                UaSubscription sub = entry.getValue();
+                Tag tag = DEVICE_NODE_TAG_MAP.remove(deviceId).remove(nodeId);
+                cancelSubscription(delDevice, sub, tag);
+            }
+        }
+    }
+
+
+    private void cancelAllSubscription() throws Exception {
+        for (Map.Entry<Long, Map<NodeId, UaSubscription>> e : DEVICE_NODE_SUB_MAP.entrySet()) {
+            Long deviceId = e.getKey();
+            Map<NodeId, UaSubscription> map = e.getValue();
+            Device device = Device.builder().id(deviceId).build();
+            for (Map.Entry<NodeId, UaSubscription> entry : map.entrySet()) {
+                NodeId nodeId = entry.getKey();
+                UaSubscription sub = entry.getValue();
+                Tag tag = DEVICE_NODE_TAG_MAP.remove(deviceId).remove(nodeId);
+                cancelSubscription(device, sub, tag);
             }
         }
     }
@@ -172,56 +199,97 @@ public class CollectorServiceBySub implements CollectorService {
 
     private void doSubOpcUaCollect(Device device, List<Tag> tags) {
         try {
-            OpcUaClient client = getOrCreateClient(device);
-            List<NodeId> newNodeIds = new ArrayList<>();
+            List<NodeId> nodeIds = new ArrayList<>();
+            Map<NodeId, Tag> deviceNodeTagMap = DEVICE_NODE_TAG_MAP.computeIfAbsent(device.getId(), k -> new HashMap<>());
+            Map<NodeId, UaSubscription> deviceNodeSubMap = DEVICE_NODE_SUB_MAP.computeIfAbsent(device.getId(), k -> new HashMap<>());
             for (Tag tag : tags) {
                 try {
                     NodeId nodeId = NodeId.parse(tag.getAddress());
-                    if (!NODE_TAG_MAP.containsKey(nodeId)) {
-                        newNodeIds.add(nodeId);
-                        NODE_TAG_MAP.put(nodeId, tag);
+                    nodeIds.add(nodeId);
+                    if (!deviceNodeTagMap.containsKey(nodeId)) {
+                        deviceNodeTagMap.put(nodeId, tag);
+                        UaSubscription subscription= createSubscription(device,nodeId,tag);
+                        deviceNodeSubMap.put(nodeId,subscription);
                     }
                 } catch (Exception parseEx) {
                     log.warn("Failed to parse address for device={} tag={} addr={} error={}",
                             device.getName(), tag.getName(), tag.getAddress(), parseEx.getMessage());
                 }
             }
-            if (newNodeIds.isEmpty()) {
-                return;
+            List<NodeId> delNodeIds = new ArrayList<>();
+            for (Map.Entry<NodeId, UaSubscription> entry : deviceNodeSubMap.entrySet()) {
+                NodeId nodeId = entry.getKey();
+                if (!nodeIds.contains(nodeId)) {
+                    delNodeIds.add(nodeId);
+                }
             }
-            client.getSubscriptionManager().createSubscription(1000.0).thenAccept(sub -> {
-                List<MonitoredItemCreateRequest> requests = new ArrayList<>();
-                for (NodeId nodeId : newNodeIds) requests.add(buildMonitoredItemRequest(nodeId));
-                sub.createMonitoredItems(TimestampsToReturn.Both, requests, (item, id) ->
-                        item.setValueConsumer((it, val) -> handleValueUpdate(it, val)));
-            }).get();
-            log.info("Device {} added {} new subscription nodes", device.getName(), newNodeIds.size());
+            for (int i = 0; i < delNodeIds.size(); i++) {
+                NodeId delNodeId = delNodeIds.get(i);
+                Tag tag = deviceNodeTagMap.remove(delNodeId);
+                cancelSubscription(device, deviceNodeSubMap.remove(delNodeId),tag);
+            }
         } catch (Exception ex) {
             processCollectionException(device, ex);
+        }
+    }
+
+    private List<Tag> getTags(NodeId nodeId) {
+        List<Tag> tags = new ArrayList<>();
+        DEVICE_NODE_TAG_MAP.forEach((deviceId,deviceNodeTagMap)->{
+           if(deviceNodeTagMap.containsKey(nodeId)){
+               tags.add(deviceNodeTagMap.get(nodeId));
+           }
+        });
+        return  tags;
+    }
+
+    private UaSubscription createSubscription(Device device, NodeId nodeId, Tag tag) throws Exception {
+        OpcUaClient client = getOrCreateClient(device);
+        UaSubscription uaSubscription = client.getSubscriptionManager().createSubscription(1000.0).get();
+        List<MonitoredItemCreateRequest> requests = new ArrayList<>();
+        requests.add(buildMonitoredItemRequest(nodeId));
+        uaSubscription.createMonitoredItems(TimestampsToReturn.Both, requests, (item, id) ->
+                item.setValueConsumer(this::handleValueUpdate));
+        log.info("Device {} added {} new subscription nodes", device.getName(), tag);
+        return uaSubscription;
+    }
+    private void cancelSubscription(Device device, UaSubscription subscription, Tag tag) throws Exception {
+        if (subscription != null) {
+            OpcUaClient client = getOrCreateClient(device);
+            client.getSubscriptionManager().deleteSubscription(subscription.getSubscriptionId()).join();
+            log.info("Device {} concel {}  subscription nodes", device.getId()+":"+device.getName(), tag);
         }
     }
 
     private void handleValueUpdate(UaMonitoredItem item, DataValue val) {
         try {
             log.debug("Subscription callback: item={} value={} status={} sourceTime={}", item.getReadValueId().getNodeId(), val.getValue(),val.getStatusCode(),val.getSourceTime());
-            Tag tag = NODE_TAG_MAP.get(item.getReadValueId().getNodeId());
-            if (tag == null || tag.getDevice() == null) return;
-            Object value = val.getValue() == null ? null : val.getValue().getValue();
-            if (value instanceof Short) {
-                value = ((Short) value).intValue();
+            List<Tag> tags = getTags(item.getReadValueId().getNodeId());
+            for (int i = 0; i < tags.size(); i++) {
+                Tag tag=tags.get(i);
+                saveTagValue(item,val,tag);
             }
-            DataRecord dataRecord = DataRecord.builder()
-                    .deviceId(tag.getDevice().getId())
-                    .tagId(tag.getId())
-                    .value(value)
-                    .timestamp(toLocalDateTimeWithSystemZone(val.getSourceTime()))
-                    .build();
-            log.debug("DataRecordgi: {}", dataRecord.toString());
-            dataStorageService.save(List.of(dataRecord));
         } catch (Exception e) {
             log.warn("Failed to process subscription callback: {}", e.getMessage());
         }
     }
+
+    private void saveTagValue(UaMonitoredItem item, DataValue val, Tag tag) {
+        if (tag == null || tag.getDevice() == null) return;
+        Object value = val.getValue() == null ? null : val.getValue().getValue();
+        if (value instanceof Short) {
+            value = ((Short) value).intValue();
+        }
+        DataRecord dataRecord = DataRecord.builder()
+                .deviceId(tag.getDevice().getId())
+                .tagId(tag.getId())
+                .value(value)
+                .timestamp(toLocalDateTimeWithSystemZone(val.getSourceTime()))
+                .build();
+        log.debug("DataRecord: {}", dataRecord.toString());
+        dataStorageService.save(List.of(dataRecord));
+    }
+
 
     private LocalDateTime toLocalDateTimeWithSystemZone(DateTime sourceTime) {
         if (sourceTime == null) {
@@ -240,11 +308,7 @@ public class CollectorServiceBySub implements CollectorService {
 
     private void processCollectionException(Device device, Exception ex) {
         String rawMsg = ex.getMessage();
-        if (rawMsg != null && rawMsg.contains("Bad_TooManySessions")) {
-            applyBackoff(device);
-        } else {
-            invalidateClient(device.getId());
-        }
+        invalidateClient(device.getId());
         log.error("Data collection failed for device={} error={}:{}",
                 device.getName(), ex.getClass().getSimpleName(), rawMsg);
     }
