@@ -97,7 +97,17 @@ public class CollectorServiceByPull implements CollectorService {
     }
 
     private boolean isOpcUa(String conn) { return conn != null && conn.startsWith("opc"); }
-
+    @Override
+    public boolean isConnectionOk(Device device) {
+        try {
+            OpcUaClient client = getOrCreateClient(device);
+            List<DataValue> dataValues =client.readValues(0, TimestampsToReturn.Source, List.of(Identifiers.Server_ServerStatus)).get();
+            return true;
+        } catch (Exception e) {
+            log.error("连接测试失败 device={} error={}:{}", device.getName(), e.getClass().getSimpleName(), e.getMessage());
+            return false;
+        }
+    }
     private void doOpcUaCollect(Device device, List<Tag> tags) {
         List<DataRecord> dataRecords = new ArrayList<>();
         try {

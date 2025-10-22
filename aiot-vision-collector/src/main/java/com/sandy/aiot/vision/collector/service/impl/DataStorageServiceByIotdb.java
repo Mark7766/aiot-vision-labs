@@ -2,6 +2,7 @@ package com.sandy.aiot.vision.collector.service.impl;
 
 import com.sandy.aiot.vision.collector.entity.DataRecord;
 import com.sandy.aiot.vision.collector.service.DataStorageService;
+import com.sun.jdi.ShortType;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;

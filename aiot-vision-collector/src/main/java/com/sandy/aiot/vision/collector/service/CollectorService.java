@@ -10,5 +10,7 @@ import java.util.concurrent.ExecutionException;
 public interface CollectorService {
     List<NamespaceVO> getNameSpaces(Device device) throws Exception;
     List<TagValueVO> getTagsByDeviceAndNamespace(Device device, NamespaceVO namespaceVO) throws Exception;
+
+    boolean isConnectionOk(Device device);
 }
 

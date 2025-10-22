@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(~{::body})}">
+<head>
+    <link rel="stylesheet" th:href="@{/css/app.css?v=20251015e}" href="/css/app.css?v=20251015e">
+</head>
 <body>
 <div class="dash-toolbar" id="dashToolbar">
     <div id="deviceCount"></div>
     <div class="grow"></div>
-    <!-- Auto refresh button -->
     <button id="autoBtn" type="button" class="btn-icon auto-refresh" onclick="toggleAuto()" title="开启自动刷新" aria-label="开启自动刷新" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v3.6m0-3.6 2.8 2.8M12 4 9.2 6.8M6 12a6 6 0 1 0 6-6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
         <span class="visually-hidden">开启自动刷新</span>
     </button>
-    <!-- Edit mode switch placed beside auto refresh (Apple-like) -->
     <div id="editModeSwitch" class="edit-switch" role="switch" aria-checked="false" tabindex="0" title="开启编辑模式" aria-label="开启编辑模式" onclick="toggleEditMode()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleEditMode();}">
         <div class="track"><div class="thumb"></div></div>
         <span id="editModeSr" class="visually-hidden">开启编辑模式</span>
@@ -22,15 +23,13 @@
     <span id="lastRefresh" class="text-dim" style="font-size:.6rem;min-width:90px;text-align:right;"></span>
 </div>
 
-<!-- 空态：无设备时引导通过悬浮按钮添加 -->
 <div th:if="${#lists.isEmpty(devices)}" class="card" id="noDeviceCard" style="max-width:520px;margin:0 auto;">
     <p class="text-dim" style="margin:.2rem 0 .6rem;font-size:.75rem;">暂无设备。使用右下角 “＋” 添加。</p>
 </div>
 
 <div class="grid" th:if="${!#lists.isEmpty(devices)}" id="deviceGridInitial">
-    <!-- 设备卡片初始渲染，后续由 JS 重绘 -->
     <div class="card" th:each="dev : ${devices}" th:attr="data-device-id=${dev.deviceId},data-device-name=${dev.deviceName},data-device-protocol=${dev.protocol},data-device-conn=${dev.connectionString}">
-        <div style="position:absolute;top:.35rem;right:.35rem;display:flex;gap:.35rem;">
+        <div class="dev-actions">
             <button type="button" class="delete-x btn-icon danger edit-only" title="删除设备" aria-label="删除设备" onclick="deleteDevice(this.closest('.card').dataset.deviceId,this);event.stopPropagation();">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12M10 7V5h4v2m-7 0v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7M9 11v6M15 11v6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">删除设备</span>
@@ -47,7 +46,7 @@
             协议: <span th:text="${dev.protocol}"></span>
             | 连接: <strong th:text="${dev.connectionOk} ? '正常' : '失败'" th:style="${dev.connectionOk} ? 'color:var(--color-ok);' : 'color:var(--color-danger);'"></strong>
         </p>
-        <div class="inline-actions" style="margin:0.3rem 0;flex-wrap:wrap;gap:.4rem;">
+        <div class="inline-actions" style="margin:0.3rem 0;">
             <button type="button" class="btn-icon ok edit-only" title="添加点位" aria-label="添加点位" onclick="openNamespaces(this.closest('.card').dataset.deviceId);event.stopPropagation();">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
                 <span class="visually-hidden">添加点位</span>
@@ -57,42 +56,63 @@
                 <span class="visually-hidden">编辑点位</span>
             </button>
         </div>
-        <table class="table tags-table" style="font-size:0.72rem;position:relative;">
+        <table class="table tags-table" style="font-size:0.72rem;">
             <thead>
             <tr>
-                <th style="width:40%;position:relative;">Tag
+                <th style="width:40%;position:relative;padding-bottom:28px;">
+                    Tag
                     <button type="button" class="filter-btn edit-only" th:id="${'filterBtn-name-' + dev.deviceId}" th:onclick="|openFilterPop(${dev.deviceId},'name');event.stopPropagation();|" aria-label="过滤名称">
                         <svg viewBox="0 0 24 24"><path d="M4 5h16L14 13v6l-4-2v-4z" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="filter-pop" th:attr="data-device=${dev.deviceId}" th:id="${'filterPop-name-' + dev.deviceId}" data-open="0">
                         <input type="text" placeholder="包含..." />
                         <div class="fp-actions">
-                            <button type="button" class="fp-apply" th:onclick="|applyFilter(${dev.deviceId},'name')|">确定</button>
-                            <button type="button" class="fp-clear" th:onclick="|clearFilter(${dev.deviceId},'name')|">清除</button>
+                            <button type="button" class="fp-apply btn-icon" th:onclick="|applyFilter(${dev.deviceId},'name')|" title="确定" aria-label="确定">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="visually-hidden">确定</span>
+                            </button>
+                            <button type="button" class="fp-clear btn-icon" th:onclick="|clearFilter(${dev.deviceId},'name')|" title="清除" aria-label="清除">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="visually-hidden">清除</span>
+                            </button>
                         </div>
                     </div>
                 </th>
-                <th style="width:30%;position:relative;">地址
+                <th style="width:30%;position:relative;padding-bottom:28px;">
+                    地址
                     <button type="button" class="filter-btn edit-only" th:id="${'filterBtn-address-' + dev.deviceId}" th:onclick="|openFilterPop(${dev.deviceId},'address');event.stopPropagation();|" aria-label="过滤地址">
                         <svg viewBox="0 0 24 24"><path d="M4 5h16L14 13v6l-4-2v-4z" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="filter-pop" th:attr="data-device=${dev.deviceId}" th:id="${'filterPop-address-' + dev.deviceId}" data-open="0">
                         <input type="text" placeholder="包含..." />
                         <div class="fp-actions">
-                            <button type="button" class="fp-apply" th:onclick="|applyFilter(${dev.deviceId},'address')|">确定</button>
-                            <button type="button" class="fp-clear" th:onclick="|clearFilter(${dev.deviceId},'address')|">清除</button>
+                            <button type="button" class="fp-apply btn-icon" th:onclick="|applyFilter(${dev.deviceId},'address')|" title="确定" aria-label="确定">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="visually-hidden">确定</span>
+                            </button>
+                            <button type="button" class="fp-clear btn-icon" th:onclick="|clearFilter(${dev.deviceId},'address')|" title="清除" aria-label="清除">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="visually-hidden">清除</span>
+                            </button>
                         </div>
                     </div>
                 </th>
-                <th style="width:30%;position:relative;">值
+                <th style="width:30%;position:relative;padding-bottom:28px;">
+                    值
                     <button type="button" class="filter-btn edit-only" th:id="${'filterBtn-value-' + dev.deviceId}" th:onclick="|openFilterPop(${dev.deviceId},'value');event.stopPropagation();|" aria-label="过滤数值">
                         <svg viewBox="0 0 24 24"><path d="M4 5h16L14 13v6l-4-2v-4z" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <div class="filter-pop" th:attr="data-device=${dev.deviceId}" th:id="${'filterPop-value-' + dev.deviceId}" data-open="0">
                         <input type="text" placeholder="包含..." />
                         <div class="fp-actions">
-                            <button type="button" class="fp-apply" th:onclick="|applyFilter(${dev.deviceId},'value')|">确定</button>
-                            <button type="button" class="fp-clear" th:onclick="|clearFilter(${dev.deviceId},'value')|">清除</button>
+                            <button type="button" class="fp-apply btn-icon" th:onclick="|applyFilter(${dev.deviceId},'value')|" title="确定" aria-label="确定">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="visually-hidden">确定</span>
+                            </button>
+                            <button type="button" class="fp-clear btn-icon" th:onclick="|clearFilter(${dev.deviceId},'value')|" title="清除" aria-label="清除">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span class="visually-hidden">清除</span>
+                            </button>
                         </div>
                     </div>
                 </th>
@@ -120,15 +140,13 @@
     </div>
 </div>
 
-<!-- 历史 / 预测 抽屉 (合并界面) -->
 <div id="drawerOverlay" class="drawer-overlay" aria-hidden="true">
     <div class="drawer" role="complementary" aria-label="历史与预测面板">
         <div id="drawerResizer" class="drawer-resizer" role="separator" aria-orientation="vertical" aria-label="调整宽度" tabindex="0"></div>
-        <div class="drawer-header" style="gap:.6rem;">
+        <div class="drawer-header">
             <h3 id="drawerTitle">历史趋势</h3>
             <span id="drawerUpdateTime"></span>
-            <!-- 移除模式分段控件，采用单一图表 + 预测叠加 -->
-            <button class="btn-icon" type="button" title="关闭" aria-label="关闭" onclick="closeDrawer()">
+            <button class="btn-icon drawer-close" type="button" title="关闭" aria-label="关闭" onclick="closeDrawer()">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">关闭</span>
             </button>
@@ -136,21 +154,20 @@
         <div class="drawer-body">
             <div>
                 <div class="drawer-section-title">折线图</div>
-                <div class="chart-shell" style="position:relative;">
-                  <canvas id="drawerCanvas" style="width:100%;height:240px;display:block;"></canvas>
-                  <div id="drawerTooltip" class="chart-tooltip" style="display:none;"></div>
-                  <div id="chartCrosshairV" class="chart-crosshair-v" style="display:none;"></div>
+                <div class="chart-shell">
+                    <canvas id="drawerCanvas" style="width:100%;height:240px;display:block;"></canvas>
+                    <div id="drawerTooltip" class="chart-tooltip" style="display:none;"></div>
+                    <div id="chartCrosshairV" class="chart-crosshair-v" style="display:none;"></div>
                 </div>
-                <!-- 图例 -->
-                <div id="chartLegend" style="display:flex;gap:1rem;margin:.4rem 0 .2rem;font-size:.65rem;">
-                  <div data-ser="hist" style="display:flex;align-items:center;gap:.35rem;">
-                    <span style="display:inline-block;width:14px;height:3px;background:#00bfff;border-radius:2px;"></span>
-                    <span>历史</span>
-                  </div>
-                  <div data-ser="pred" id="legendPred" role="button" tabindex="0" aria-pressed="true" aria-label="切换预测曲线显示" style="display:none;align-items:center;gap:.35rem;">
-                    <span style="display:inline-block;width:14px;height:3px;background:linear-gradient(90deg,#ffa500,#ffbf40);border-radius:2px;position:relative;overflow:hidden;"></span>
-                    <span>预测</span>
-                  </div>
+                <div id="chartLegend" class="legend">
+                    <div data-ser="hist">
+                        <span class="lg-box"></span>
+                        <span>历史</span>
+                    </div>
+                    <div data-ser="pred" id="legendPred" role="button" tabindex="0" aria-pressed="true" aria-label="切换预测曲线显示" style="display:none;">
+                        <span class="lg-box lg-box-forecast"></span>
+                        <span>预测</span>
+                    </div>
                 </div>
                 <div id="compareInfo" class="compare-info" style="display:none;"></div>
                 <div id="drawerHint" class="hint" style="display:none;">当前数据非数值型或为空，显示下方表格。</div>
@@ -162,22 +179,22 @@
                     <span id="predictStatus" class="text-dim" style="display:none;font-size:.65rem;">预测中...</span>
                 </div>
                 <div id="metricBox" class="metrics" style="display:none;"></div>
-                <div id="compareTableOuter" style="margin-top:.5rem;">
-                  <div id="compareCollapseHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="compareTableWrap" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:.25rem .4rem;background:#0e2732;border:1px solid var(--color-border);border-radius:6px;" onclick="toggleCompareCollapse()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCompareCollapse();}">
-                    <div class="drawer-section-title" style="margin:0;">历史 vs 预测 对比</div>
-                    <div style="font-size:.55rem;color:var(--color-text-dim);display:flex;align-items:center;gap:.35rem;">
-                      <span id="compareCount" style="font-size:.55rem;"></span>
-                      <span id="compareCollapseIcon">▼</span>
+                <div id="compareTableOuter">
+                    <div id="compareCollapseHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="compareTableWrap" onclick="toggleCompareCollapse()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCompareCollapse();}">
+                        <div class="drawer-section-title">历史 vs 预测 对比</div>
+                        <div>
+                            <span id="compareCount"></span>
+                            <span id="compareCollapseIcon">▼</span>
+                        </div>
                     </div>
-                  </div>
-                  <div id="compareTableWrap" style="display:none;margin-top:.35rem;">
-                    <div style="max-height:180px;overflow:auto;border:1px solid var(--color-border);border-radius:6px;background:#0b1d26;">
-                      <table class="small-table" style="font-size:.65rem;">
-                        <thead><tr><th>预测时间</th><th>预测值</th><th>历史时间</th><th>历史值</th><th>差值</th><th>差异%</th></tr></thead>
-                        <tbody id="compareTBody"><tr><td colspan="6" class="text-dim" style="padding:4px;">暂无数据</td></tr></tbody>
-                      </table>
+                    <div id="compareTableWrap" style="display:none;">
+                        <div style="max-height:180px;overflow:auto;border:1px solid var(--color-border);border-radius:6px;">
+                            <table class="small-table">
+                                <thead><tr><th>预测时间</th><th>预测值</th><th>历史时间</th><th>历史值</th><th>差值</th><th>差异%</th></tr></thead>
+                                <tbody id="compareTBody"><tr><td colspan="6" class="text-dim">暂无数据</td></tr></tbody>
+                            </table>
+                        </div>
                     </div>
-                  </div>
                 </div>
             </div>
             <div>
@@ -185,7 +202,7 @@
                 <div style="max-height:240px;overflow:auto;border:1px solid var(--color-border);border-radius:6px;">
                     <table class="small-table">
                         <thead><tr><th style="width:55%;">时间</th><th style="width:45%;">值</th></tr></thead>
-                        <tbody id="drawerTableBody"><tr><td colspan="2" style="padding:6px;" class="text-dim">加载中...</td></tr></tbody>
+                        <tbody id="drawerTableBody"><tr><td colspan="2" class="text-dim">加载中...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -193,12 +210,11 @@
     </div>
 </div>
 
-<!-- 添加设备 Modal -->
 <div id="addDeviceModal" class="modal-overlay" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="modal-wrapper" role="document">
+    <div class="modal-wrapper">
         <div class="modal-header">
             <h3>添加设备</h3>
-            <button class="btn-icon" type="button" title="关闭" aria-label="关闭" onclick="closeAddDeviceModal()">
+            <button class="btn-icon close-x" type="button" title="关闭" aria-label="关闭" onclick="closeAddDeviceModal()">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">关闭</span>
             </button>
@@ -216,7 +232,7 @@
                 <label for="devConn">连接字符串</label>
                 <input id="devConn" type="text" placeholder="opc.tcp://host:port" required maxlength="500">
             </div>
-            <div id="addDevMsg" class="text-dim" style="font-size:.65rem;height:1em;"></div>
+            <div id="addDevMsg" class="text-dim"></div>
             <div class="modal-actions">
                 <button type="button" class="btn-icon" title="取消" aria-label="取消" onclick="closeAddDeviceModal()">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -231,12 +247,11 @@
     </div>
 </div>
 
-<!-- 设备编辑 Modal -->
 <div id="editDeviceModal" class="modal-overlay" aria-hidden="true" role="dialog" aria-modal="true" style="display:none;">
     <div class="modal-wrapper">
         <div class="modal-header">
             <h3>编辑设备</h3>
-            <button class="btn-icon" type="button" title="关闭" aria-label="关闭" onclick="closeEditDeviceModal()">
+            <button class="btn-icon close-x" type="button" title="关闭" aria-label="关闭" onclick="closeEditDeviceModal()">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">关闭</span>
             </button>
@@ -255,7 +270,7 @@
                 <label for="editDevConn">连接字符串</label>
                 <input id="editDevConn" type="text" required maxlength="500">
             </div>
-            <div id="editDevMsg" class="text-dim" style="font-size:.65rem;height:1em;"></div>
+            <div id="editDevMsg" class="text-dim"></div>
             <div class="modal-actions">
                 <button type="button" class="btn-icon" title="取消" aria-label="取消" onclick="closeEditDeviceModal()">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -270,44 +285,43 @@
     </div>
 </div>
 
-<!-- Namespace Modal (Redesigned) -->
 <div id="namespaceModal" class="modal-overlay" aria-hidden="true" role="dialog" aria-modal="true" style="display:none;">
-    <div class="modal-wrapper" style="max-width:920px;width:92%;display:flex;flex-direction:column;gap:.8rem;min-height:420px;">
-        <div class="modal-header" style="margin-bottom:.2rem;">
-            <h3 style="margin:0;">添加点位</h3>
-            <div style="display:flex;align-items:center;gap:.6rem;">
-                <span id="nsSelectedLabel" class="text-dim" style="font-size:.6rem;letter-spacing:.5px;min-height:1em;">未选择命名空间</span>
-                <button type="button" class="btn-icon" title="关闭" aria-label="关闭" onclick="closeNsModal()">
+    <div class="ns-wrapper">
+        <div class="ns-header">
+            <h2>添加点位</h2>
+            <div class="flex gap-sm">
+                <span id="nsSelectedLabel" class="text-dim">未选择命名空间</span>
+                <button type="button" class="btn-icon close-btn" title="关闭" aria-label="关闭" onclick="closeNsModal()">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     <span class="visually-hidden">关闭</span>
                 </button>
             </div>
         </div>
-        <div class="ns-columns" style="flex:1;display:flex;gap:1rem;min-height:0;">
-            <div class="ns-left" style="flex:0 0 260px;display:flex;flex-direction:column;min-height:0;">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 .35rem;">
-                    <div style="font-size:.6rem;letter-spacing:1px;text-transform:uppercase;color:var(--color-text-dim);">Namespaces</div>
-                    <div id="nsListStatus" style="font-size:.55rem;color:var(--color-text-dim);"></div>
+        <div class="ns-columns">
+            <div class="ns-left">
+                <div class="flex">
+                    <div class="drawer-section-title">Namespaces</div>
+                    <div id="nsListStatus" class="text-dim"></div>
                 </div>
-                <ul id="nsList" style="list-style:none;margin:0;padding:0;flex:1;overflow:auto;border:1px solid var(--color-border);border-radius:8px;background:#0f2533;">
-                    <li class="text-dim" style="padding:.6rem;font-size:.65rem;">加载中...</li>
+                <ul id="nsList">
+                    <li class="text-dim">加载中...</li>
                 </ul>
             </div>
-            <div class="ns-right" style="flex:1;display:flex;flex-direction:column;min-width:340px;min-height:0;">
-                <div class="ns-tags-head" style="display:flex;align-items:center;justify-content:space-between;margin:0 0 .35rem;">
-                    <div style="font-size:.6rem;letter-spacing:1px;text-transform:uppercase;color:var(--color-text-dim);">Tags</div>
-                    <div id="nsStatus" class="text-dim" style="font-size:.55rem;min-height:1em;"></div>
+            <div class="ns-right">
+                <div class="ns-tags-head">
+                    <div class="drawer-section-title">Tags</div>
+                    <div id="nsStatus" class="ns-status"></div>
                 </div>
-                <div class="ns-tags-container" style="flex:1;overflow:auto;border:1px solid var(--color-border);border-radius:8px;background:#0f2533;">
-                    <table style="width:100%;border-collapse:collapse;font-size:.68rem;">
-                        <thead><tr><th style="text-align:left;padding:6px 8px;width:30%;">名称</th><th style="text-align:left;padding:6px 8px;width:38%;">地址</th><th style="text-align:left;padding:6px 8px;width:18%;">值</th><th style="text-align:right;padding:6px 8px;width:14%;">操作</th></tr></thead>
-                        <tbody id="nsTagBody"><tr><td colspan="4" class="text-dim" style="padding:.7rem .6rem;">左侧选择命名空间</td></tr></tbody>
+                <div class="ns-tags-container">
+                    <table>
+                        <thead><tr><th>名称</th><th>地址</th><th>值</th><th>操作</th></tr></thead>
+                        <tbody id="nsTagBody"><tr><td colspan="4" class="text-dim">左侧选择命名空间</td></tr></tbody>
                     </table>
                 </div>
             </div>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.3rem;">
-            <button type="button" class="btn-icon" onclick="closeNsModal()" title="关闭" aria-label="关闭">
+        <div class="modal-actions">
+            <button type="button" class="btn-icon close-btn" onclick="closeNsModal()" title="关闭" aria-label="关闭">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">关闭</span>
             </button>
@@ -315,37 +329,35 @@
     </div>
 </div>
 
-<!-- 编辑点位 Modal -->
 <div id="editTagsModal" class="modal-overlay" aria-hidden="true" role="dialog" aria-modal="true" style="display:none;">
-    <div class="modal-wrapper" style="max-width:640px;" role="document">
+    <div class="modal-wrapper">
         <div class="modal-header">
             <h3>编辑点位</h3>
-            <button class="btn-icon" type="button" title="关闭" aria-label="关闭" onclick="closeEditTagsModal()">
+            <button class="btn-icon close-x" type="button" title="关闭" aria-label="关闭" onclick="closeEditTagsModal()">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">关闭</span>
             </button>
         </div>
         <div style="max-height:60vh;overflow:auto;">
-            <table class="table small-table" style="font-size:.7rem;">
-                <thead><tr><th style="width:28%;">名称</th><th style="width:42%;">地址</th><th style="width:30%;">操作</th></tr></thead>
-                <tbody id="editTagsBody"><tr><td colspan="3" class="text-dim" style="padding:.4rem;">加载中...</td></tr></tbody>
+            <table class="table small-table">
+                <thead><tr><th>名称</th><th>地址</th><th>操作</th></tr></thead>
+                <tbody id="editTagsBody"><tr><td colspan="3" class="text-dim">加载中...</td></tr></tbody>
             </table>
         </div>
-        <div id="editTagsMsg" class="text-dim" style="font-size:.6rem;height:1em;margin-top:.3rem;"></div>
-        <div class="modal-actions" style="margin-top:.4rem;">
-            <button type="button" class="btn-icon" title="关闭" aria-label="关闭" onclick="closeEditTagsModal()">
+        <div id="editTagsMsg" class="text-dim"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-icon close-btn" title="关闭" aria-label="关闭" onclick="closeEditTagsModal()">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">关闭</span>
             </button>
         </div>
     </div>
 </div>
-<!-- FAB 悬浮操作按钮 (简化：直接添加设备) -->
+
 <div class="fab-container" id="fab">
     <button class="fab-main" id="fabMain" type="button" aria-label="添加设备" onclick="openAddDeviceModal()">＋</button>
 </div>
 
-<!-- External modular scripts -->
 <script th:src="@{/js/data-dashboard.js?v=20251015e}" src="/js/data-dashboard.js?v=20251015e" defer></script>
 </body>
 </html>
