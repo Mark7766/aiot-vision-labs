@@ -22,7 +22,7 @@ predict:
   api:
     url: ${AVC_PREDICT_API_URL:http://localhost:50000/predict}
     prediction-length: ${AVC_PREDICT_API_PREDICTION_LENGTH:60}
-    history-length: ${AVC_PREDICT_API_HISTORY_LENGTH:180}
+    history-length: ${AVC_PREDICT_API_HISTORY_LENGTH:300}
   cache:
     enabled: ${AVC_PREDICT_CACHE_ENABLED:true}
     prefetch-interval-ms: ${AVC_PREDICT_CACHE_PREFETCH_INTERVAL_MS:30000}

@@ -98,13 +98,16 @@ public class AlertScanService {
             Double predicted = predictionCacheService.getPredictedValue(device.getId(), tag.getId(), actualTs);
             if (predicted == null || Double.isNaN(predicted)) {
                 log.info("No cached prediction value for deviation alert deviceId={} tagId={} ts={}", device.getId(), tag.getId(), actualTs);
-                return; // 无预测基线, 不产生偏差预警
+                return; // 无预测基线
             }
 
-            double denom = Math.abs(predicted) > 1e-9 ? predicted : (Math.abs(actual) > 1e-9 ? actual : 1.0);
-            double deviationPct = (actual - predicted) / denom * 100.0;
-            log.info("Deviation evaluation deviceId={} tagId={} actual={} predicted={} deviationPct={}% deviationPercentThreshold={}", device.getId(), tag.getId(), actual, predicted, String.format("%.2f", deviationPct),deviationPercentThreshold);
-            if (Math.abs(deviationPct) < deviationPercentThreshold) return; // 未达到偏差阈值
+            Double deviationPctObj = computeDeviationPercent(actual, predicted);
+            if (deviationPctObj == null) return; // 计算失败
+            double deviationPct = deviationPctObj;
+            if (Double.isNaN(deviationPct)) return;
+            log.info("Deviation evaluation deviceId={} tagId={} actual={} predicted={} deviationPct={}% deviationPercentThreshold={}",
+                    device.getId(), tag.getId(), actual, predicted, String.format("%.2f", deviationPct), deviationPercentThreshold);
+            if (Math.abs(deviationPct) < deviationPercentThreshold) return; // 未达到阈值
 
             String signature = buildSignature(device.getId(), tag.getId(), "DEVIATION");
             LocalDateTime cutoff = LocalDateTime.now().minus(duplicateSuppressMinutes, ChronoUnit.MINUTES);
@@ -140,6 +143,42 @@ public class AlertScanService {
         } catch (Exception e) {
             log.debug("Failed deviation evaluation for deviceId={} tagId={} error={}", device.getId(), tag.getId(), e.getMessage());
         }
+    }
+
+    /**
+     * 计算偏差百分比 (actual vs predicted) 并对 actual==0 / predicted≈0 的特殊情况做优化。
+     * 规则:
+     * 1. 两者都几乎为 0 (|value| < EPS) -> 返回 0 (视为无偏差, 跳过)
+     * 2. 优先使用预测值作为分母 (若其绝对值 >= EPS)
+     * 3. 否则用实际值作为分母 (若其绝对值 >= EPS)
+     * 4. 若二者都 < EPS 已在第1步处理，不进入 0 分母情况
+     */
+    private Double computeDeviationPercent(Double actual, Double predicted) {
+        if (actual == null || predicted == null) return null;
+        final double EPS = 1e-6; // near-zero 阈值
+        double a = actual;
+        double p = predicted;
+        boolean aZeroLike = Math.abs(a) < EPS;
+        boolean pZeroLike = Math.abs(p) < EPS;
+        if (aZeroLike && pZeroLike) {
+            // 都接近 0 视为无偏差，返回 0 (调用方会跳过阈值判断)
+            return 0d;
+        }
+        double denom;
+        if (!pZeroLike) {
+            denom = p; // 优先预测值
+        } else if (!aZeroLike) {
+            denom = a; // 次选实际值
+        } else {
+            // 理论不会到达 (两者都 zeroLike 已在前面处理)，兜底
+            denom = 1.0;
+        }
+        if (Math.abs(denom) < EPS) {
+            // 仍不安全，避免数值炸裂
+            log.debug("Skip deviation evaluation due to near-zero denominator deviceId? actual={} predicted={} denom={}", a, p, denom);
+            return null;
+        }
+        return (a - p) / denom * 100.0;
     }
 
     private String computeSeverityByPercent(double absDeviationPercent) {
