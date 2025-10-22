@@ -6,6 +6,8 @@
     <link rel="stylesheet" th:href="@{/css/app.css}" href="/css/app.css" />
     <!-- Shared utilities -->
     <script th:src="@{/js/common.js}" src="/js/common.js" defer></script>
+    <!-- Alerts panel logic (added to fix fetchAlerts ReferenceError and enable click-to-expand) -->
+    <script th:src="@{/js/alerts-enhanced.js}" src="/js/alerts-enhanced.js" defer></script>
     <script>
         // No section highlighting needed; minimalist design
         // Secret API button reveal logic: type sequence "a" "p" "i" within 1.5s to reveal

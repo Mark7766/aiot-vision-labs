@@ -23,6 +23,12 @@ predict:
     url: ${AVC_PREDICT_API_URL:http://localhost:50000/predict}
     prediction-length: ${AVC_PREDICT_API_PREDICTION_LENGTH:60}
     history-length: ${AVC_PREDICT_API_HISTORY_LENGTH:180}
+  cache:
+    enabled: ${AVC_PREDICT_CACHE_ENABLED:true}
+    prefetch-interval-ms: ${AVC_PREDICT_CACHE_PREFETCH_INTERVAL_MS:30000}
+    min-ahead-minutes: ${AVC_PREDICT_CACHE_MIN_AHEAD_MINUTES:2}
+    tolerance-ms: ${AVC_PREDICT_CACHE_TOLERANCE_MS:30000}
+    max-points-per-tag: ${AVC_PREDICT_CACHE_MAX_POINTS_PER_TAG:5000}
 
 # 数据视图/接口配置
 data:
@@ -43,6 +49,14 @@ iotdb:
     db: ${AVC_IOTDB_RT_DB:rt}
     # TTL 为 1 天（毫秒） 7 * 24 * 60 * 60 * 1000L
     ttl: ${AVC_IOTDB_RT_TTL:86400000}
+
+# 预警功能 (MVP 阈值+预测偏差)
+alert:
+  enabled: ${AVC_ALERT_ENABLED:true}
+  scan-interval-ms: ${AVC_ALERT_SCAN_INTERVAL_MS:60000} # 定时扫描间隔
+  duplicate-suppress-minutes: ${AVC_ALERT_DUP_SUPPRESS_MINUTES:5} # 5 分钟内相同签名不重复
+  prediction-enabled: ${AVC_ALERT_PREDICTION_ENABLED:true} # 启用预测基线/偏差逻辑
+  deviation-percent-threshold: ${AVC_ALERT_DEVIATION_PERCENT_THRESHOLD:15} # (当前-预测)/预测 *100 超过此百分比则触发偏差预警
 
 logging:
   level:

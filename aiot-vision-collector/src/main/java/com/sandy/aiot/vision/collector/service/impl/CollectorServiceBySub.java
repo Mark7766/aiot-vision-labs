@@ -207,9 +207,10 @@ public class CollectorServiceBySub implements CollectorService {
                     NodeId nodeId = NodeId.parse(tag.getAddress());
                     nodeIds.add(nodeId);
                     if (!deviceNodeTagMap.containsKey(nodeId)) {
-                        deviceNodeTagMap.put(nodeId, tag);
+                        //需要考虑订阅失败情况
                         UaSubscription subscription= createSubscription(device,nodeId,tag);
                         deviceNodeSubMap.put(nodeId,subscription);
+                        deviceNodeTagMap.put(nodeId, tag);
                     }
                 } catch (Exception parseEx) {
                     log.warn("Failed to parse address for device={} tag={} addr={} error={}",
