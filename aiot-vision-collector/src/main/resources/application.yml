@@ -56,7 +56,7 @@ alert:
   scan-interval-ms: ${AVC_ALERT_SCAN_INTERVAL_MS:60000} # 定时扫描间隔
   duplicate-suppress-minutes: ${AVC_ALERT_DUP_SUPPRESS_MINUTES:5} # 5 分钟内相同签名不重复
   prediction-enabled: ${AVC_ALERT_PREDICTION_ENABLED:true} # 启用预测基线/偏差逻辑
-  deviation-percent-threshold: ${AVC_ALERT_DEVIATION_PERCENT_THRESHOLD:15} # (当前-预测)/预测 *100 超过此百分比则触发偏差预警
+  deviation-percent-threshold: ${AVC_ALERT_DEVIATION_PERCENT_THRESHOLD:30} # (当前-预测)/预测 *100 超过此百分比则触发偏差预警
 
 logging:
   level:

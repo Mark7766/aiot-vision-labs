@@ -13,4 +13,5 @@ public interface AlertRepository extends JpaRepository<Alert, Long> {
     List<Alert> findByAcknowledgedFalseAndIgnoredFalseOrderByCreatedAtDesc();
     Optional<Alert> findTopBySignatureAndAcknowledgedFalseAndIgnoredFalseAndCreatedAtAfter(String signature, LocalDateTime after);
     List<Alert> findTop50ByOrderByCreatedAtDesc();
+    List<Alert> findByCreatedAtAfterOrderByCreatedAtAsc(LocalDateTime after);
 }

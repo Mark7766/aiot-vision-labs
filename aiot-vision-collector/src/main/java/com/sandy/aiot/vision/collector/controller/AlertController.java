@@ -14,8 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import java.util.*; // added Map/LinkedHashMap import
 import java.util.stream.Collectors;
 
 /**
@@ -45,6 +44,51 @@ public class AlertController {
     @GetMapping("/recent")
     public List<AlertItem> listRecent() {
         return alertRepository.findTop50ByOrderByCreatedAtDesc().stream().map(this::toItem).collect(Collectors.toList());
+    }
+
+    // New stats endpoint for big screen monitoring
+    @GetMapping("/stats")
+    public Stats stats() {
+        Stats s = new Stats();
+        List<Alert> active = alertRepository.findByAcknowledgedFalseAndIgnoredFalseOrderByCreatedAtDesc();
+        s.setActiveCount(active.size());
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime dayAgo = now.minusHours(24);
+        List<Alert> recent = alertRepository.findByCreatedAtAfterOrderByCreatedAtAsc(dayAgo);
+        s.setRecent24hCount(recent.size());
+        s.setSeverityActive(countBySeverity(active));
+        s.setSeverityRecent24h(countBySeverity(recent));
+        // Hour buckets (last 12 hours including current hour)
+        Map<String, Integer> hourMap = new LinkedHashMap<>();
+        for (int i = 11; i >= 0; i--) {
+            LocalDateTime start = now.minusHours(i).withMinute(0).withSecond(0).withNano(0);
+            String label = String.format("%02d:00", start.getHour());
+            hourMap.put(label, 0);
+        }
+        for (Alert a : recent) {
+            LocalDateTime ts = a.getCreatedAt();
+            if (ts == null) continue;
+            if (ts.isBefore(now.minusHours(12))) continue;
+            String label = String.format("%02d:00", ts.getHour());
+            hourMap.computeIfPresent(label, (k, v) -> v + 1);
+        }
+        List<HourStat> hourStats = hourMap.entrySet().stream().map(e -> {
+            HourStat h = new HourStat();
+            h.setHour(e.getKey());
+            h.setCount(e.getValue());
+            return h;
+        }).collect(Collectors.toList());
+        s.setHourStats(hourStats);
+        return s;
+    }
+
+    private Map<String, Integer> countBySeverity(List<Alert> alerts) {
+        Map<String, Integer> map = new LinkedHashMap<>();
+        for (Alert a : alerts) {
+            String sev = Optional.ofNullable(a.getSeverity()).orElse("UNKNOWN").toUpperCase();
+            map.put(sev, map.getOrDefault(sev, 0) + 1);
+        }
+        return map;
     }
 
     @PostMapping("/{id}/ack")
@@ -150,5 +194,18 @@ public class AlertController {
     public static class Meta {
         private boolean enabled;
         private int activeCount;
+    }
+
+    // New DTOs
+    @Data
+    public static class HourStat { private String hour; private int count; }
+
+    @Data
+    public static class Stats {
+        private int activeCount;
+        private int recent24hCount;
+        private Map<String,Integer> severityActive;
+        private Map<String,Integer> severityRecent24h;
+        private List<HourStat> hourStats;
     }
 }

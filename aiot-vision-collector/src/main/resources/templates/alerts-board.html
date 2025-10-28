@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>预警监控大屏</title>
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #1a1f2e;
+            --bg-card: #1e2432;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a8b3;
+            --accent-blue: #00b7ff;
+            --accent-orange: #ff9500;
+            --accent-red: #ff3b30;
+            --accent-green: #34c759;
+            --accent-purple: #af52de;
+            --border-light: rgba(255, 255, 255, 0.1);
+            --shadow-light: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --shadow-hover: 0 8px 30px rgba(0, 183, 255, 0.2);
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --font-mono: 'Consolas', 'Monaco', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        .board-container {
+            max-width: 1920px;
+            margin: 0 auto;
+            padding: 20px;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            gap: 30px;
+            height: 100vh;
+        }
+
+        /* Header */
+        .board-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(26, 31, 46, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px 32px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-light);
+        }
+
+        .board-header h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .board-header .subtitle {
+            font-size: 1rem;
+            margin-top: 4px;
+            opacity: 0.8;
+        }
+
+        .board-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn-icon {
+            background: rgba(0, 183, 255, 0.1);
+            border: 1px solid var(--accent-blue);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: var(--accent-blue);
+        }
+
+        .btn-icon:hover {
+            background: var(--accent-blue);
+            color: white;
+            box-shadow: var(--shadow-hover);
+            transform: scale(1.05);
+        }
+
+        .btn-icon svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            stroke-width: 2;
+        }
+
+        #lastBoardRefresh {
+            font-size: 0.8rem;
+            min-width: 100px;
+            text-align: right;
+            color: var(--accent-blue);
+            font-family: var(--font-mono);
+        }
+
+        /* Stats Grid */
+        .board-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-light);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            opacity: 0.7;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-value {
+            font-size: 3rem;
+            font-weight: 300;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .stat-hint {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* Severity Box */
+        .severity-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .severity-chip {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s ease;
+        }
+
+        .severity-chip:hover {
+            transform: scale(1.05);
+        }
+
+        .severity-chip strong {
+            color: var(--text-primary);
+        }
+
+        .sev-low { background: rgba(52, 199, 89, 0.2); color: var(--accent-green); border: 1px solid var(--accent-green); }
+        .sev-medium { background: rgba(255, 149, 0, 0.2); color: var(--accent-orange); border: 1px solid var(--accent-orange); }
+        .sev-high { background: rgba(255, 59, 48, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }
+        .sev-critical { background: rgba(175, 82, 222, 0.2); color: var(--accent-purple); border: 1px solid var(--accent-purple); }
+
+        /* Chart Canvas */
+        .stat-hour {
+            position: relative;
+        }
+
+        #hourCanvas {
+            width: 100%;
+            height: 120px;
+            border-radius: 8px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-light);
+        }
+
+        /* Alerts Section */
+        .active-alerts-section {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-light);
+            overflow-y: auto;
+            max-height: 60vh;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-light);
+            padding-bottom: 12px;
+        }
+
+        .section-head h2 {
+            font-size: 1.8rem;
+            font-weight: 300;
+            color: var(--accent-blue);
+        }
+
+        #activeListMeta {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .alert-item-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid var(--border-light);
+            transition: background 0.2s ease;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .alert-item-row:hover {
+            background: rgba(0, 183, 255, 0.05);
+            border-radius: 8px;
+        }
+
+        .air-main {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+        }
+
+        .air-msg {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .air-text {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .ack-badge {
+            background: var(--accent-green);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            margin-left: 8px;
+        }
+
+        .air-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        #emptyAlerts {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .board-stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="board-container">
+    <div class="board-header">
+        <div>
+            <h1>工业·主动·预警监控</h1>
+            <p class="subtitle text-dim">AI驱动 · 实时预警 (基于数据趋势主动预警)</p>
+        </div>
+        <div class="board-actions">
+            <button type="button" class="btn-icon" id="boardRefreshBtn" title="立即刷新" aria-label="立即刷新" onclick="manualRefresh()">
+                <svg viewBox="0 0 24 24"><path d="M12 4v3.6m0-3.6 2.8 2.8M12 4 9.2 6.8M6 12a6 6 0 1 0 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <span id="lastBoardRefresh"></span>
+        </div>
+    </div>
+
+    <div class="board-stats-grid">
+        <div class="stat-card" id="statActive">
+            <div class="stat-label">活动预警</div>
+            <div class="stat-value" id="activeCount">0</div>
+            <div class="stat-hint text-dim">未确认且未忽略</div>
+        </div>
+        <div class="stat-card" id="statRecent">
+            <div class="stat-label">24小时新增</div>
+            <div class="stat-value" id="recent24hCount">0</div>
+            <div class="stat-hint text-dim">过去24小时生成</div>
+        </div>
+        <div class="stat-card" id="statSeverity">
+            <div class="stat-label">当前严重级别分布</div>
+            <div class="severity-box" id="severityActiveBox"></div>
+        </div>
+        <div class="stat-card" id="statSeverityRecent">
+            <div class="stat-label">24小时严重级别分布</div>
+            <div class="severity-box" id="severityRecentBox"></div>
+        </div>
+        <div class="stat-card stat-hour" id="statHour">
+            <div class="stat-label">近12小时趋势 (含预测)</div>
+            <canvas id="hourCanvas" width="360" height="120" aria-label="近12小时预警趋势图"></canvas>
+        </div>
+    </div>
+
+    <div class="active-alerts-section">
+        <div class="section-head">
+            <h2>活动预警列表</h2>
+            <span id="activeListMeta"></span>
+        </div>
+        <div id="activeAlerts"></div>
+        <div id="emptyAlerts">当前无活动预警。</div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const activeCountEl = document.getElementById('activeCount');
+        const recent24hCountEl = document.getElementById('recent24hCount');
+        const severityActiveBox = document.getElementById('severityActiveBox');
+        const severityRecentBox = document.getElementById('severityRecentBox');
+        const hourCanvas = document.getElementById('hourCanvas');
+        const hourCtx = hourCanvas.getContext('2d');
+        const activeAlertsWrap = document.getElementById('activeAlerts');
+        const emptyAlertsEl = document.getElementById('emptyAlerts');
+        const activeListMeta = document.getElementById('activeListMeta');
+        const lastBoardRefresh = document.getElementById('lastBoardRefresh');
+
+        let autoTimer = null;
+
+        function fmtTs(){
+            const d = new Date();
+            return d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        }
+
+        function manualRefresh(){
+            fetchAll();
+        }
+        window.manualRefresh = manualRefresh;
+
+        function fetchAll(){
+            Promise.all([fetch('/data/api/alerts/stats'), fetch('/data/api/alerts')])
+                .then(([statsResp, activeResp]) => Promise.all([statsResp.json(), activeResp.json()]))
+                .then(([stats, active]) => {
+                    renderStats(stats);
+                    renderActive(active);
+                    lastBoardRefresh.textContent = fmtTs();
+                })
+                .catch(err => {
+                    console.error('Board fetch failed', err);
+                });
+        }
+
+        function renderStats(s){
+            activeCountEl.textContent = s.activeCount;
+            recent24hCountEl.textContent = s.recent24hCount;
+            severityActiveBox.innerHTML = buildSeverityChips(s.severityActive);
+            severityRecentBox.innerHTML = buildSeverityChips(s.severityRecent24h);
+            drawHourChart(s.hourStats || []);
+        }
+
+        function buildSeverityChips(map){
+            if(!map || Object.keys(map).length === 0) return '<span class="text-dim" style="font-size:.55rem;">无</span>';
+            return Object.keys(map).map(k => {
+                const cls = 'severity-chip sev-' + k.toLowerCase();
+                return `<span class="${cls}" title="${k}">${k}<strong>${map[k]}</strong></span>`;
+            }).join('');
+        }
+
+        function drawHourChart(list){
+            const w = hourCanvas.width, h = hourCanvas.height;
+            hourCtx.clearRect(0,0,w,h);
+            hourCtx.fillStyle = '#0f1d26';
+            hourCtx.fillRect(0,0,w,h);
+            const padding = 6;
+            const max = Math.max(1, ...list.map(it => it.count));
+            const barWidth = (w - padding*2) / (list.length);
+            list.forEach((it,i) => {
+                const x = padding + i*barWidth;
+                const heightRatio = it.count / max;
+                const barH = Math.max(2, Math.round((h - 24) * heightRatio));
+                const y = h - barH - 14;
+                const grd = hourCtx.createLinearGradient(x, y, x, y+barH);
+                grd.addColorStop(0,'#00b7ff');
+                grd.addColorStop(1,'#036487');
+                hourCtx.fillStyle = grd;
+                hourCtx.fillRect(x + barWidth*0.15, y, barWidth*0.7, barH);
+                hourCtx.fillStyle = '#8b949e';
+                hourCtx.font = '10px "Segoe UI", Arial';
+                hourCtx.textAlign = 'center';
+                hourCtx.fillText(it.hour.replace(':00',''), x + barWidth/2, h-4);
+            });
+        }
+
+        function renderActive(list){
+            activeAlertsWrap.innerHTML = '';
+            if(!list || list.length === 0){
+                emptyAlertsEl.style.display = 'block';
+                activeListMeta.textContent = '';
+                return;
+            }
+            emptyAlertsEl.style.display = 'none';
+            activeListMeta.textContent = `共 ${list.length} 条`;
+            list.forEach(a => {
+                const div = document.createElement('div');
+                div.className = 'alert-item-row';
+                div.innerHTML = `
+                    <div class="air-main">
+                        <span class="severity-chip sev-${(a.severity||'UNKNOWN').toLowerCase()}" title="严重级别">${a.severity||'UNKNOWN'}</span>
+                        <div class="air-msg">
+                            <strong>${escapeHtml(a.deviceName||'设备')}</strong>
+                            <span class="text-dim">/</span>
+                            <strong>${escapeHtml(a.tagName||'Tag')}</strong>
+                            <span class="air-text">${escapeHtml(a.message||'')}</span>
+                        </div>
+                    </div>
+                    <div class="air-meta">${formatDateTime(a.createdAt)}${a.acknowledged?'<span class="ack-badge" title="已确认">ACK</span>':''}</div>
+                `;
+                activeAlertsWrap.appendChild(div);
+            });
+        }
+
+        function escapeHtml(str){
+            return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
+        }
+        function formatDateTime(dt){
+            if(!dt) return '';
+            return dt.replace('T',' ').substring(0,19);
+        }
+
+        function startAuto(){
+            stopAuto();
+            autoTimer = setInterval(fetchAll, 10000);
+        }
+        function stopAuto(){ if(autoTimer) clearInterval(autoTimer); }
+
+        document.addEventListener('visibilitychange', () => {
+            if(document.hidden){ stopAuto(); } else { startAuto(); fetchAll(); }
+        });
+
+        // Initial
+        fetchAll();
+        startAuto();
+    })();
+</script>
+</body>
+</html>

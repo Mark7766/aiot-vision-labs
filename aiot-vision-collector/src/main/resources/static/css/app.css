@@ -477,4 +477,37 @@ body.edit-mode .edit-only { display:inline-flex !important; }
 .dap-item.processing { opacity:.6; }
 .dap-item.acknowledged, .dap-item.ignored { animation:fadeOut .25s ease forwards; }
 @media (max-width:640px){ .dev-alert-pop { left:10px; right:10px; width:auto; } }
-/* End device alert popover styles */
+
+/* Big screen styles for alert board */
+.board-header { display:flex; align-items:flex-end; gap:1.2rem; flex-wrap:wrap; margin:0 0 1.2rem; }
+.board-header h1 { margin:0; font-size:1.9rem; font-weight:600; letter-spacing:.5px; background:linear-gradient(90deg,#00b7ff,#37d6ff); -webkit-background-clip:text; color:transparent; }
+.board-header .subtitle { margin:0; font-size:.7rem; letter-spacing:.6px; }
+.board-actions { display:flex; align-items:center; gap:.6rem; }
+.board-stats-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap:1rem; margin:0 0 1.6rem; }
+.stat-card { background:linear-gradient(160deg,#15202b,#1d2c39); border:1px solid var(--color-border); border-radius:12px; padding:.85rem .95rem 1rem; display:flex; flex-direction:column; gap:.4rem; position:relative; overflow:hidden; }
+.stat-card:before { content:''; position:absolute; inset:0; background:radial-gradient(circle at 18% 22%,rgba(0,183,255,0.12),transparent 60%), repeating-linear-gradient(45deg,rgba(255,255,255,0.02) 0 2px, transparent 2px 6px); mix-blend-mode:overlay; pointer-events:none; }
+.stat-label { font-size:.6rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--color-text-dim); font-weight:600; }
+.stat-value { font-size:2.1rem; font-weight:600; font-family:var(--font-mono); letter-spacing:1px; color:var(--color-accent); line-height:1.1; }
+.stat-hint { font-size:.55rem; letter-spacing:.5px; }
+.severity-box { display:flex; flex-wrap:wrap; gap:.4rem; }
+.severity-chip { display:inline-flex; align-items:center; gap:.35rem; font-size:.55rem; letter-spacing:.5px; padding:.25rem .55rem; border-radius:999px; background:#112a36; border:1px solid var(--color-border); font-weight:600; color:var(--color-text-dim); transition:background .25s ease,color .25s ease,border-color .25s ease; }
+.severity-chip strong { font-weight:700; color:var(--color-text); margin-left:.1rem; }
+.severity-chip:hover { background:#17384b; color:var(--color-text); border-color:var(--color-border-strong); }
+.sev-high { background:rgba(255,107,107,.12); border-color:var(--color-danger); color:var(--color-danger); }
+.sev-high strong { color:#fff; }
+.sev-medium { background:rgba(255,179,71,.12); border-color:var(--color-warn); color:var(--color-warn); }
+.sev-low { background:rgba(79,209,125,.14); border-color:var(--color-ok); color:var(--color-ok); }
+.sev-unknown { background:#203340; border-color:#264454; color:#8b949e; }
+#hourCanvas { width:100%; height:100px; display:block; border:1px solid var(--color-border); border-radius:8px; background:#0f1d26; }
+.active-alerts-section { margin:0 0 2rem; }
+.active-alerts-section h2 { margin:.2rem 0 .8rem; font-size:1.2rem; font-weight:600; letter-spacing:.5px; color:var(--color-accent); }
+.alert-items { display:flex; flex-direction:column; gap:.5rem; }
+.alert-item-row { background:#15202b; border:1px solid var(--color-border); padding:.55rem .7rem .55rem .7rem; border-radius:10px; display:flex; align-items:center; justify-content:space-between; gap:.8rem; position:relative; transition:background .25s ease,border-color .25s ease,transform .25s ease; }
+.alert-item-row:hover { background:#1d2c39; border-color:var(--color-border-strong); }
+.air-main { display:flex; align-items:center; gap:.6rem; flex:1; min-width:0; }
+.air-msg { display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; font-size:.7rem; letter-spacing:.4px; }
+.air-msg strong { font-weight:600; color:var(--color-text); }
+.air-text { white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:480px; color:var(--color-text-dim); }
+.air-meta { font-size:.6rem; display:flex; align-items:center; gap:.5rem; }
+.ack-badge { font-size:.5rem; padding:.2rem .4rem; background:#023341; color:var(--color-accent); border:1px solid var(--color-accent); border-radius:999px; letter-spacing:.5px; font-weight:600; }
+@media (max-width:860px){ .air-text { max-width:220px; } .stat-value { font-size:1.7rem; } }
