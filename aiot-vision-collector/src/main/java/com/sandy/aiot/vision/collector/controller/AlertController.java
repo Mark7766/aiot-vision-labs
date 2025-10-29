@@ -208,4 +208,65 @@ public class AlertController {
         private Map<String,Integer> severityRecent24h;
         private List<HourStat> hourStats;
     }
+
+    @PostMapping("/batch-ack")
+    public ResponseEntity<BatchActionResp> batchAcknowledge(@RequestBody BatchActionReq req) {
+        List<Long> ids = req.getIds();
+        List<Long> failed = new ArrayList<>();
+        int success = 0;
+        for (Long id : ids) {
+            Optional<Alert> opt = alertRepository.findById(id);
+            if (opt.isEmpty()) { failed.add(id); continue; }
+            Alert a = opt.get();
+            if (!a.isAcknowledged()) {
+                a.setAcknowledged(true);
+                a.setAcknowledgedAt(LocalDateTime.now());
+                alertRepository.save(a);
+                success++;
+            } else {
+                // already acknowledged, treat as success
+                success++;
+            }
+        }
+        BatchActionResp resp = new BatchActionResp();
+        resp.setSuccessCount(success);
+        resp.setFailedIds(failed);
+        return ResponseEntity.ok(resp);
+    }
+
+    @PostMapping("/batch-ignore")
+    public ResponseEntity<BatchActionResp> batchIgnore(@RequestBody BatchActionReq req) {
+        List<Long> ids = req.getIds();
+        List<Long> failed = new ArrayList<>();
+        int success = 0;
+        for (Long id : ids) {
+            Optional<Alert> opt = alertRepository.findById(id);
+            if (opt.isEmpty()) { failed.add(id); continue; }
+            Alert a = opt.get();
+            if (!a.isIgnored()) {
+                a.setIgnored(true);
+                a.setIgnoredAt(LocalDateTime.now());
+                alertRepository.save(a);
+                success++;
+            } else {
+                // already ignored, treat as success
+                success++;
+            }
+        }
+        BatchActionResp resp = new BatchActionResp();
+        resp.setSuccessCount(success);
+        resp.setFailedIds(failed);
+        return ResponseEntity.ok(resp);
+    }
+
+    @Data
+    public static class BatchActionReq {
+        private List<Long> ids;
+    }
+
+    @Data
+    public static class BatchActionResp {
+        private int successCount;
+        private List<Long> failedIds;
+    }
 }
