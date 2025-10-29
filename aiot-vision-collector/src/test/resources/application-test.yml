@@ -14,6 +14,7 @@ logging:
     com.sandy.aiot.vision.collector: INFO
 predict:
   api:
+    url: http://localhost:50000/predict # dummy for tests
     prediction-length: 5
     history-length: 30
 
@@ -24,3 +25,11 @@ data:
     latest-minutes-window: 2
   tag-history:
     default-minutes: 3
+
+alert:
+  enabled: true
+  scan-interval-ms: 2000
+  duplicate-suppress-minutes: 10
+  severity-high-percent: 20
+  prediction-enabled: true
+  deviation-percent-threshold: 15

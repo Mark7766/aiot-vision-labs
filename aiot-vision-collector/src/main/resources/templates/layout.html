@@ -6,6 +6,8 @@
     <link rel="stylesheet" th:href="@{/css/app.css}" href="/css/app.css" />
     <!-- Shared utilities -->
     <script th:src="@{/js/common.js}" src="/js/common.js" defer></script>
+    <!-- Alerts panel logic (added to fix fetchAlerts ReferenceError and enable click-to-expand) -->
+    <script th:src="@{/js/alerts-enhanced.js}" src="/js/alerts-enhanced.js" defer></script>
     <script>
         // No section highlighting needed; minimalist design
         // Secret API button reveal logic: type sequence "a" "p" "i" within 1.5s to reveal
@@ -38,6 +40,7 @@
 <body>
 <nav class="navbar" style="justify-content:space-between;">
     <a href="/" class="navbar-brand" title="主页">AIoT Vision</a>
+    <a href="/alerts/board" class="nav-link" title="预警监控大屏">预警</a>
     <!-- Hidden secret API access (Easter egg) -->
     <a id="secretApiBtn" href="/swagger-ui/index.html" target="_blank" rel="noopener" aria-hidden="true" style="display:none;font-size:.55rem;padding:.18rem .45rem;border:1px solid var(--color-border);border-radius:5px;background:#0d222d;color:var(--color-text-dim);text-decoration:none;align-items:center;gap:.25rem;">API</a>
     <div style="flex:1 0 auto;"></div>

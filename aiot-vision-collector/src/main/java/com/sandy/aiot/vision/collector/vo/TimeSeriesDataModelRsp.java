@@ -20,7 +20,7 @@ public class TimeSeriesDataModelRsp {
     @AllArgsConstructor
     public static class PredictionPointRsp {
         private String timestamp;
-        private Float value;
+        private Double value;
     }
 
     public static TimeSeriesDataModelRsp empty(){

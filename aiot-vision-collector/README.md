@@ -315,3 +315,41 @@ Copyright (c) <Year> <Owner>
 
 祝您使用顺利！
 
+---
+## 预警监控大屏 (Alerts Board)
+
+新增页面: `/alerts/board`
+
+设计原则 (Apple 简约风):
+- 信息聚焦: 只保留核心指标 (活动预警数、24h新增、严重级别分布、近12小时趋势)。
+- 视觉克制: 同一配色体系下的少量强调色 (Accent / Danger / Warn / OK)。
+- 层次清晰: 栅格化卡片 + 轻量阴影，不使用复杂装饰。
+- 动态刷新: 前端每 10 秒自动拉取最新统计与活动预警列表，页面隐藏时暂停刷新以降低资源消耗。
+
+主要 REST 接口:
+- `GET /data/api/alerts` 活动预警列表
+- `GET /data/api/alerts/stats` 统计指标 (活动数量、24h新增、严重级别分布、近12小时趋势)
+- `POST /data/api/alerts/{id}/ack` 确认预警
+- `POST /data/api/alerts/{id}/ignore` 忽略预警
+
+统计结构示例:
+```json
+{
+  "activeCount": 3,
+  "recent24hCount": 15,
+  "severityActive": {"HIGH":1, "MEDIUM":1, "LOW":1},
+  "severityRecent24h": {"HIGH":4, "MEDIUM":6, "LOW":5},
+  "hourStats": [ {"hour":"08:00","count":2}, ... ]
+}
+```
+
+前端文件: `src/main/resources/static/js/alert-board.js`
+样式扩展: `app.css` 中新增 `.board-*` / `.severity-chip` / `.alert-item-row` 等选择器。
+
+可扩展点:
+- 增加筛选 (按设备 / 严重级别) 与分页
+- 添加 WebSocket 推送替代轮询
+- 国际化 (message / severity 标签)
+
+测试:
+- `AlertStatsApiTest` 验证统计接口结构 (小时桶固定为 12)。
