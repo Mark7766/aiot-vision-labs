@@ -51,15 +51,15 @@ public class PredictServiceImpl implements PredictService {
                 .orElseThrow(() -> new IllegalArgumentException("Device[deviceId=" + deviceId + "] not found"));
         int fetch = historyFetchLength > 0 ? historyFetchLength : 200;
         List<DataRecord> dataRecords = dataStorageService.findTopN(device.getId(), tagId, fetch);
-        List<Float> recentValues = new ArrayList<>(dataRecords.size());
+        List<Double> recentValues = new ArrayList<>(dataRecords.size());
         List<LocalDateTime> recentTimestamps = new ArrayList<>(dataRecords.size());
         for (DataRecord dataRecord : dataRecords) {
-            recentValues.add(toFloat(dataRecord.getValue()));
+            recentValues.add(toDouble(dataRecord.getValue()));
             recentTimestamps.add(dataRecord.getTimestamp());
         }
         Collections.reverse(recentValues);
         Collections.reverse(recentTimestamps);
-        List<Float> predictions = doPredict(recentValues);
+        List<Double> predictions = doPredict(recentValues);
         List<PredictionPoint> points = buildPredictionPoints(recentTimestamps, predictions);
         TimeSeriesDataModelVO vo = new TimeSeriesDataModelVO();
         vo.setTimestamps(recentTimestamps);
@@ -70,48 +70,48 @@ public class PredictServiceImpl implements PredictService {
     /**
      * Converts an object to a float value, handling various types and edge cases.
      */
-    private Float toFloat(Object value) {
-        if (value == null) return Float.NaN;
-        if (value instanceof Float f) return normalizeFloat(f);
-        if (value instanceof Number n) return normalizeFloat(n.floatValue());
-        if (value instanceof Boolean b) return b ? 1.0f : 0.0f;
+    private Double toDouble(Object value) {
+        if (value == null) return Double.NaN;
+        if (value instanceof Float f) return normalizeDouble(f.doubleValue());
+        if (value instanceof Number n) return normalizeDouble(n.doubleValue());
+        if (value instanceof Boolean b) return b ? 1.0d : 0.0d;
         if (value instanceof CharSequence cs) {
             String s = cs.toString().trim();
-            if (s.isEmpty()) return Float.NaN;
+            if (s.isEmpty()) return Double.NaN;
             String cleaned = s.replace(",", "");
             if (cleaned.endsWith("%")) {
                 String pct = cleaned.substring(0, cleaned.length() - 1);
                 try {
-                    return normalizeFloat(Float.parseFloat(pct) / 100f);
+                    return normalizeDouble(Double.parseDouble(pct) / 100d);
                 } catch (NumberFormatException ignored) {
-                    return Float.NaN;
+                    return Double.NaN;
                 }
             }
             try {
-                return normalizeFloat(Float.parseFloat(cleaned));
+                return normalizeDouble(Double.parseDouble(cleaned));
             } catch (NumberFormatException e) {
                 return tryParseLeading(cleaned, s);
             }
         }
         if (value instanceof Collection<?> col) {
-            for (Object v : col) if (v != null) return toFloat(v);
-            return Float.NaN;
+            for (Object v : col) if (v != null) return toDouble(v);
+            return Double.NaN;
         }
         if (value.getClass().isArray()) {
             int len = java.lang.reflect.Array.getLength(value);
-            return len > 0 ? toFloat(java.lang.reflect.Array.get(value, 0)) : Float.NaN;
+            return len > 0 ? toDouble(java.lang.reflect.Array.get(value, 0)) : Float.NaN;
         }
         try {
-            return normalizeFloat(Float.parseFloat(value.toString().trim()));
+            return normalizeDouble(Double.parseDouble(value.toString().trim()));
         } catch (Exception e) {
-            return Float.NaN;
+            return Double.NaN;
         }
     }
 
     /**
      * Attempts to parse the leading numeric portion of a string as a float.
      */
-    private Float tryParseLeading(String cleaned, String original) {
+    private Double tryParseLeading(String cleaned, String original) {
         int i = 0;
         boolean dot = false;
         boolean sign = false;
@@ -127,25 +127,25 @@ public class PredictServiceImpl implements PredictService {
         }
         if (i > 0) {
             try {
-                return normalizeFloat(Float.parseFloat(cleaned.substring(0, i)));
+                return normalizeDouble(Double.parseDouble(cleaned.substring(0, i)));
             } catch (NumberFormatException ignored) {
             }
         }
         log.debug("Unable to parse string as float: '{}'", original);
-        return Float.NaN;
+        return Double.NaN;
     }
 
     /**
      * Normalizes a float value, converting infinite or NaN values to Float.NaN.
      */
-    private Float normalizeFloat(Float f) {
-        return (f == null || Float.isInfinite(f) || Float.isNaN(f)) ? Float.NaN : f;
+    private Double normalizeDouble(Double f) {
+        return (f == null || Double.isInfinite(f) || Double.isNaN(f)) ? Double.NaN : f;
     }
 
     /**
      * Builds prediction points based on recent timestamps and predicted values.
      */
-    private List<PredictionPoint> buildPredictionPoints(List<LocalDateTime> recentTs, List<Float> predictions) {
+    private List<PredictionPoint> buildPredictionPoints(List<LocalDateTime> recentTs, List<Double> predictions) {
         if (predictions == null || predictions.isEmpty()) return Collections.emptyList();
         if (recentTs == null || recentTs.isEmpty()) return buildFromBase(LocalDateTime.now(), Duration.ofMinutes(1), predictions);
         Duration step = inferStep(recentTs);
@@ -159,7 +159,7 @@ public class PredictServiceImpl implements PredictService {
     /**
      * Builds prediction points from a base timestamp, step duration, and predicted values.
      */
-    private List<PredictionPoint> buildFromBase(LocalDateTime base, Duration step, List<Float> values) {
+    private List<PredictionPoint> buildFromBase(LocalDateTime base, Duration step, List<Double> values) {
         List<PredictionPoint> list = new ArrayList<>(values.size());
         for (int i = 0; i < values.size(); i++)
             list.add(PredictionPoint.builder().timestamp(base.plus(step.multipliedBy(i + 1))).value(values.get(i)).build());
@@ -186,7 +186,7 @@ public class PredictServiceImpl implements PredictService {
     /**
      * Performs prediction by calling an external API or falling back to a simple strategy.
      */
-    private List<Float> doPredict(List<Float> recentValues) {
+    private List<Double> doPredict(List<Double> recentValues) {
         if (recentValues == null || recentValues.isEmpty()) {
             log.warn("recentValues is empty, returning empty predictions");
             return Collections.emptyList();
@@ -209,12 +209,12 @@ public class PredictServiceImpl implements PredictService {
             }
             Map<String, Object> map = objectMapper.readValue(resp.getBody(), new TypeReference<>() {});
             Object predsObj = map.get("predictions");
-            List<Float> predictions = new ArrayList<>();
+            List<Double> predictions = new ArrayList<>();
             if (predsObj instanceof List<?> list) {
                 for (Object v : list) {
-                    if (v instanceof Number n) predictions.add(n.floatValue());
+                    if (v instanceof Number n) predictions.add(n.doubleValue());
                     else if (v != null) try {
-                        predictions.add(Float.parseFloat(v.toString()));
+                        predictions.add(Double.parseDouble(v.toString()));
                     } catch (NumberFormatException ignored) {
                     }
                 }
@@ -237,22 +237,22 @@ public class PredictServiceImpl implements PredictService {
     /**
      * Fallback prediction strategy using the last value or average of recent values.
      */
-    private List<Float> fallbackPredict(List<Float> recentValues, int predictionLength) {
-        List<Float> fb = new ArrayList<>(predictionLength);
-        float fill;
-        if (recentValues == null || recentValues.isEmpty()) fill = 0f;
+    private List<Double> fallbackPredict(List<Double> recentValues, int predictionLength) {
+        List<Double> fb = new ArrayList<>(predictionLength);
+        Double fill;
+        if (recentValues == null || recentValues.isEmpty()) fill = 0d;
         else {
             fill = recentValues.get(recentValues.size() - 1);
-            if (Float.isNaN(fill)) {
+            if (Double.isNaN(fill)) {
                 double sum = 0;
                 int c = 0;
-                for (Float v : recentValues) {
-                    if (v != null && !Float.isNaN(v)) {
+                for (Double v : recentValues) {
+                    if (v != null && !Double.isNaN(v)) {
                         sum += v;
                         c++;
                     }
                 }
-                fill = c == 0 ? 0f : (float) (sum / c);
+                fill = c == 0 ? 0d : (float) (sum / c);
             }
         }
         for (int i = 0; i < predictionLength; i++) fb.add(fill);

@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>预警监控</title>
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #1a1f2e;
+            --bg-card: #1e2432;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a8b3;
+            --accent-blue: #00b7ff;
+            --accent-orange: #ff9500;
+            --accent-red: #ff3b30;
+            --accent-green: #34c759;
+            --accent-purple: #af52de;
+            --border-light: rgba(255, 255, 255, 0.1);
+            --shadow-light: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --shadow-hover: 0 8px 30px rgba(0, 183, 255, 0.2);
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --font-mono: 'Consolas', 'Monaco', monospace;
+            --color-ok: #34c759;
+            --color-danger: #ff3b30;
+            --color-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            min-height: 100vh;
+            font-size: 0.75rem;
+        }
+
+        .board-container {
+            max-width: 1920px;
+            margin: 0 auto;
+            padding: 8px;
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 12px;
+            height: 100vh;
+        }
+
+        /* Header */
+        .board-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(26, 31, 46, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 8px;
+            padding: 10px 16px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-light);
+        }
+
+        .board-header h1 {
+            font-size: 1.3rem;
+            font-weight: 300;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+        }
+
+        .board-header .subtitle {
+            font-size: 0.65rem;
+            margin-top: 2px;
+            opacity: 0.8;
+        }
+
+        .board-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-icon {
+            background: rgba(0, 183, 255, 0.1);
+            border: 1px solid var(--accent-blue);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: var(--accent-blue);
+        }
+
+        .btn-icon:hover {
+            background: var(--accent-blue);
+            color: white;
+            box-shadow: var(--shadow-hover);
+            transform: scale(1.05);
+        }
+
+        .btn-icon svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            fill: none;
+        }
+
+        #lastBoardRefresh {
+            font-size: 0.6rem;
+            min-width: 80px;
+            text-align: right;
+            color: var(--accent-blue);
+            font-family: var(--font-mono);
+        }
+
+        /* Stats Grid */
+        .board-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            grid-auto-rows: 115px;
+            align-items: stretch;
+            margin-bottom: 0;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 12px 14px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-light);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            opacity: 0.7;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 300;
+            color: var(--text-primary);
+            line-height: 1.1;
+            margin: 0;
+        }
+
+        .stat-hint {
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        #statActive, #statRecent {
+            text-align: center;
+            justify-content: center;
+            gap: 3px;
+        }
+
+        /* 严重级别分布优化 */
+        #statSeverity .severity-box,
+        #statSeverityRecent .severity-box {
+            margin-top: 6px;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .severity-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 6px;
+            justify-content: center;
+        }
+
+        .severity-chip {
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 0.8rem; /* 增大字体 */
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            min-width: 60px; /* 最小宽度保证协调 */
+            justify-content: center;
+            transition: transform 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .severity-chip:hover {
+            transform: scale(1.08);
+        }
+
+        .severity-chip strong {
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+
+        .sev-low { background: rgba(52, 199, 89, 0.25); color: var(--accent-green); border: 1px solid var(--accent-green); }
+        .sev-medium { background: rgba(255, 149, 0, 0.25); color: var(--accent-orange); border: 1px solid var(--accent-orange); }
+        .sev-high { background: rgba(255, 59, 48, 0.25); color: var(--accent-red); border: 1px solid var(--accent-red); }
+        .sev-critical { background: rgba(175, 82, 222, 0.25); color: var(--accent-purple); border: 1px solid var(--accent-purple); }
+
+        /* 图表卡片 */
+        .stat-hour {
+            padding: 10px 12px;
+            position: relative;
+        }
+
+        .stat-hour .stat-label {
+            font-size: 0.75rem;
+            margin-bottom: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #hourCanvas {
+            width: 100% !important;
+            height: auto !important;
+            max-height: 70px;
+            min-height: 55px;
+            border-radius: 4px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-light);
+            cursor: crosshair;
+        }
+
+        .chart-tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            pointer-events: none;
+            z-index: 100;
+            white-space: nowrap;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            border: 1px solid var(--accent-blue);
+        }
+
+        /* Alerts Section */
+        .active-alerts-section {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-light);
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid var(--border-light);
+            padding-bottom: 6px;
+            gap: 8px;
+        }
+
+        .section-head h2 {
+            font-size: 1.1rem;
+            font-weight: 300;
+            color: var(--accent-blue);
+            margin: 0;
+        }
+
+        #activeListMeta {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+        }
+
+        .batch-actions {
+            display: flex;
+            gap: 6px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .batch-actions.visible {
+            opacity: 1;
+        }
+
+        .alert-item-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid var(--border-light);
+            transition: background 0.2s ease;
+            animation: fadeIn 0.5s ease-in;
+            font-size: 0.7rem;
+            position: relative;
+        }
+
+        .alert-item-row:hover {
+            background: rgba(0, 183, 255, 0.05);
+            border-radius: 6px;
+        }
+
+        .alert-checkbox {
+            width: 14px;
+            height: 14px;
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .air-main {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+        }
+
+        .air-msg {
+            display: flex;
+            align-items: center;
+            gap: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .air-text {
+            color: var(--text-secondary);
+            font-size: 0.7rem;
+        }
+
+        .ack-badge {
+            background: var(--accent-green);
+            color: white;
+            padding: 1px 5px;
+            border-radius: 8px;
+            font-size: 0.6rem;
+            margin-left: 4px;
+        }
+
+        .air-meta {
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        #emptyAlerts {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 1200px) {
+            .board-stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            }
+            .board-header h1 {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="board-container">
+    <div class="board-header">
+        <div>
+            <h1>工业·主动·预警监控</h1>
+            <p class="subtitle text-dim">AI驱动 · 实时预警 (基于数据趋势主动预警)</p>
+        </div>
+        <div class="board-actions">
+            <button type="button" class="btn-icon" id="boardRefreshBtn" title="立即刷新" aria-label="立即刷新" onclick="manualRefresh()">
+                <svg viewBox="0 0 24 24"><path d="M12 4v3.6m0-3.6 2.8 2.8M12 4 9.2 6.8M6 12a6 6 0 1 0 6-6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+            </button>
+            <span id="lastBoardRefresh"></span>
+        </div>
+    </div>
+
+    <div class="board-stats-grid">
+        <div class="stat-card" id="statActive">
+            <div class="stat-label">活动预警</div>
+            <div class="stat-value" id="activeCount">0</div>
+            <div class="stat-hint text-dim">未确认且未忽略</div>
+        </div>
+        <div class="stat-card" id="statRecent">
+            <div class="stat-label">24小时新增</div>
+            <div class="stat-value" id="recent24hCount">0</div>
+            <div class="stat-hint text-dim">过去24小时生成</div>
+        </div>
+        <div class="stat-card" id="statSeverity">
+            <div class="stat-label">当前严重级别分布</div>
+            <div class="severity-box" id="severityActiveBox"></div>
+        </div>
+        <div class="stat-card" id="statSeverityRecent">
+            <div class="stat-label">24小时严重级别分布</div>
+            <div class="severity-box" id="severityRecentBox"></div>
+        </div>
+        <div class="stat-card stat-hour" id="statHour">
+            <div class="stat-label">近12小时趋势 (含预测)</div>
+            <canvas id="hourCanvas" aria-label="近12小时预警趋势图"></canvas>
+            <div id="chartTooltip" class="chart-tooltip"></div>
+        </div>
+    </div>
+
+    <div class="active-alerts-section">
+        <div class="section-head">
+            <h2>活动预警列表</h2>
+            <div class="batch-actions" id="batchActions">
+                <button type="button" class="btn-icon" id="batchAckBtn" title="批量确认" onclick="batchAcknowledge()">
+                    <svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+                </button>
+                <button type="button" class="btn-icon" id="batchIgnoreBtn" title="批量忽略" onclick="batchIgnore()">
+                    <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6l-12 12" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+                </button>
+                <button type="button" class="btn-icon" id="batchCancelBtn" title="取消选择" onclick="cancelBatch()">
+                    <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+                </button>
+            </div>
+            <span id="activeListMeta"></span>
+        </div>
+        <div id="activeAlerts"></div>
+        <div id="emptyAlerts">当前无活动预警。</div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const activeCountEl = document.getElementById('activeCount');
+        const recent24hCountEl = document.getElementById('recent24hCount');
+        const severityActiveBox = document.getElementById('severityActiveBox');
+        const severityRecentBox = document.getElementById('severityRecentBox');
+        const hourCanvas = document.getElementById('hourCanvas');
+        const hourCtx = hourCanvas.getContext('2d');
+        const chartTooltip = document.getElementById('chartTooltip');
+        const activeAlertsWrap = document.getElementById('activeAlerts');
+        const emptyAlertsEl = document.getElementById('emptyAlerts');
+        const activeListMeta = document.getElementById('activeListMeta');
+        const lastBoardRefresh = document.getElementById('lastBoardRefresh');
+        const batchActions = document.getElementById('batchActions');
+
+        let autoTimer = null;
+        let selectedAlerts = new Set();
+
+        function fmtTs(){
+            const d = new Date();
+            return d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        }
+
+        function manualRefresh(){
+            fetchAll();
+        }
+        window.manualRefresh = manualRefresh;
+
+        function fetchAll(){
+            Promise.all([fetch('/data/api/alerts/stats'), fetch('/data/api/alerts')])
+                .then(([statsResp, activeResp]) => Promise.all([statsResp.json(), activeResp.json()]))
+                .then(([stats, active]) => {
+                    renderStats(stats);
+                    renderActive(active);
+                    lastBoardRefresh.textContent = fmtTs();
+                })
+                .catch(err => {
+                    console.error('Board fetch failed', err);
+                });
+        }
+
+        function renderStats(s){
+            activeCountEl.textContent = s.activeCount || 0;
+            recent24hCountEl.textContent = s.recent24hCount || 0;
+            severityActiveBox.innerHTML = buildSeverityChips(s.severityActive);
+            severityRecentBox.innerHTML = buildSeverityChips(s.severityRecent24h);
+            drawLineChart(s.hourStats || []);
+        }
+
+        function buildSeverityChips(map){
+            if(!map || Object.keys(map).length === 0) return '<span style="color:#666;font-size:.65rem;">无</span>';
+            return Object.keys(map).map(k => {
+                const cls = 'severity-chip sev-' + k.toLowerCase();
+                return `<span class="${cls}" title="${k}级">${k}<strong>${map[k]}</strong></span>`;
+            }).join('');
+        }
+
+        function drawLineChart(data){
+            const canvas = hourCanvas;
+            const container = canvas.parentElement;
+            const availableHeight = container.clientHeight - 36;
+            const targetHeight = Math.max(55, Math.min(80, availableHeight));
+
+            canvas.height = targetHeight;
+            canvas.style.height = targetHeight + 'px';
+            canvas.width = container.clientWidth - 24;
+
+            const w = canvas.width;
+            const h = canvas.height;
+            const ctx = hourCtx;
+
+            ctx.clearRect(0,0,w,h);
+            ctx.fillStyle = '#0f1d26';
+            ctx.fillRect(0,0,w,h);
+
+            if (!data || data.length === 0) {
+                ctx.fillStyle = '#8b949e';
+                ctx.font = '11px "Segoe UI"';
+                ctx.textAlign = 'center';
+                ctx.fillText('暂无数据', w/2, h/2);
+                canvas.dataset.points = '[]';
+                return;
+            }
+
+            const padding = { top: 8, right: 10, bottom: 16, left: 28 };
+            const plotW = w - padding.left - padding.right;
+            const plotH = h - padding.top - padding.bottom;
+            const maxY = Math.max(1, ...data.map(d => d.count));
+            const points = data.map((d, i) => {
+                const x = padding.left + (i / (data.length - 1)) * plotW;
+                const y = padding.top + plotH - (d.count / maxY) * plotH;
+                return { x, y, count: d.count, hour: d.hour };
+            });
+
+            // 绘制折线
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.strokeStyle = '#00b7ff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 绘制点
+            points.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#00b7ff';
+                ctx.fill();
+                ctx.strokeStyle = '#003e66';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+
+            // X轴标签
+            ctx.fillStyle = '#8b949e';
+            ctx.font = '9px "Segoe UI"';
+            ctx.textAlign = 'center';
+            points.forEach(p => {
+                ctx.fillText(p.hour.replace(':00',''), p.x, h - 4);
+            });
+
+            // 关键：更新 dataset.points 供 tooltip 使用
+            canvas.dataset.points = JSON.stringify(points);
+            canvas.dataset.lastData = JSON.stringify(data);
+        }
+
+        // 修复：鼠标悬浮显示数据
+        hourCanvas.addEventListener('mousemove', function(e) {
+            const rect = hourCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const points = JSON.parse(hourCanvas.dataset.points || '[]');
+
+            if (points.length === 0) return;
+
+            const closest = points.reduce((prev, curr) =>
+                Math.abs(curr.x - x) < Math.abs(prev.x - x) ? curr : prev, points[0]
+            );
+
+            if (Math.abs(closest.x - x) < 20) {
+                chartTooltip.textContent = `${closest.hour}：${closest.count} 条`;
+                chartTooltip.style.display = 'block';
+                const tooltipWidth = chartTooltip.offsetWidth;
+                const left = Math.max(10, Math.min(rect.left + closest.x - tooltipWidth / 2, window.innerWidth - tooltipWidth - 10));
+                chartTooltip.style.left = left + 'px';
+                chartTooltip.style.top = (rect.top + closest.y - 32) + 'px';
+            } else {
+                chartTooltip.style.display = 'none';
+            }
+        });
+
+        hourCanvas.addEventListener('mouseout', () => {
+            chartTooltip.style.display = 'none';
+        });
+
+        function renderActive(list){
+            activeAlertsWrap.innerHTML = '';
+            selectedAlerts.clear();
+            batchActions.classList.remove('visible');
+
+            if(!list || list.length === 0){
+                emptyAlertsEl.style.display = 'block';
+                activeListMeta.textContent = '';
+                return;
+            }
+            emptyAlertsEl.style.display = 'none';
+            activeListMeta.textContent = `共 ${list.length} 条`;
+
+            list.forEach(a => {
+                const div = document.createElement('div');
+                div.className = 'alert-item-row';
+                div.dataset.id = a.id;
+                div.innerHTML = `
+                    <input type="checkbox" class="alert-checkbox" onchange="toggleSelect(${a.id}, this.checked)">
+                    <div class="air-main">
+                        <span class="severity-chip sev-${(a.severity||'UNKNOWN').toLowerCase()}" title="严重级别">${a.severity||'UNKNOWN'}</span>
+                        <div class="air-msg">
+                            <strong>${escapeHtml(a.deviceName||'设备')}</strong>
+                            <span class="text-dim">/</span>
+                            <strong>${escapeHtml(a.tagName||'Tag')}</strong>
+                            <span class="air-text">${escapeHtml(a.message||'')}</span>
+                        </div>
+                    </div>
+                    <div class="air-meta">${formatDateTime(a.createdAt)}${a.acknowledged?'<span class="ack-badge" title="已确认">ACK</span>':''}</div>
+                `;
+                activeAlertsWrap.appendChild(div);
+            });
+        }
+
+        window.toggleSelect = function(id, checked) {
+            if (checked) {
+                selectedAlerts.add(id);
+            } else {
+                selectedAlerts.delete(id);
+            }
+            batchActions.classList.toggle('visible', selectedAlerts.size > 0);
+        };
+
+        window.batchAcknowledge = async function() {
+            if (selectedAlerts.size === 0) return;
+            const ids = Array.from(selectedAlerts);
+            try {
+                const resp = await fetch('/data/api/alerts/batch-ack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids })
+                });
+                const result = await resp.json();
+                if (result.successCount > 0) {
+                    fetchAll();
+                }
+            } catch (err) {
+                console.error('Batch ack failed', err);
+            }
+        };
+
+        window.batchIgnore = async function() {
+            if (selectedAlerts.size === 0) return;
+            const ids = Array.from(selectedAlerts);
+            try {
+                const resp = await fetch('/data/api/alerts/batch-ignore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids })
+                });
+                const result = await resp.json();
+                if (result.successCount > 0) {
+                    fetchAll();
+                }
+            } catch (err) {
+                console.error('Batch ignore failed', err);
+            }
+        };
+
+        window.cancelBatch = function() {
+            selectedAlerts.clear();
+            document.querySelectorAll('.alert-checkbox').forEach(cb => cb.checked = false);
+            batchActions.classList.remove('visible');
+        };
+
+        function escapeHtml(str){
+            return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
+        }
+
+        function formatDateTime(dt){
+            if(!dt) return '';
+            return dt.replace('T',' ').substring(0,19);
+        }
+
+        function startAuto(){
+            stopAuto();
+            autoTimer = setInterval(fetchAll, 10000);
+        }
+        function stopAuto(){ if(autoTimer) clearInterval(autoTimer); }
+
+        window.addEventListener('resize', () => {
+            if (hourCanvas.dataset.lastData) {
+                const data = JSON.parse(hourCanvas.dataset.lastData);
+                drawLineChart(data);
+            }
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if(document.hidden){ stopAuto(); } else { startAuto(); fetchAll(); }
+        });
+
+        fetchAll();
+        startAuto();
+    })();
+</script>
+</body>
+</html>

@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(~{::body})}">
-<head>
-    <link rel="stylesheet" th:href="@{/css/app.css?v=20251015e}" href="/css/app.css?v=20251015e">
-</head>
 <body>
 <div class="dash-toolbar" id="dashToolbar">
     <div id="deviceCount"></div>
+    <!-- 新增: 预警状态区域 -->
+    <div id="alertSummary" class="alert-summary" style="font-size:.6rem;min-width:120px;color:#ffb347;display:flex;align-items:center;gap:4px;">
+        <span id="alertActiveCount" aria-live="polite"></span>
+        <button type="button" id="alertRefreshBtn" class="btn-icon" style="display:none;" title="刷新预警" aria-label="刷新预警" onclick="fetchAlerts(true)">
+            <svg viewBox="0 0 24 24"><path d="M12 4v3.6m0-3.6 2.8 2.8M12 4 9.2 6.8M6 12a6 6 0 1 0 6-6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
+    </div>
     <div class="grow"></div>
     <button id="autoBtn" type="button" class="btn-icon auto-refresh" onclick="toggleAuto()" title="开启自动刷新" aria-label="开启自动刷新" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v3.6m0-3.6 2.8 2.8M12 4 9.2 6.8M6 12a6 6 0 1 0 6-6" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
@@ -22,9 +26,13 @@
     <span id="autoLive" class="visually-hidden" aria-live="polite"></span>
     <span id="lastRefresh" class="text-dim" style="font-size:.6rem;min-width:90px;text-align:right;"></span>
 </div>
+<!-- 新增: 预警面板容器 -->
+<div id="alertPanel" class="alert-panel" style="display:none;margin:.4rem 0;">
+    <div id="alertList" class="alert-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+</div>
 
 <div th:if="${#lists.isEmpty(devices)}" class="card" id="noDeviceCard" style="max-width:520px;margin:0 auto;">
-    <p class="text-dim" style="margin:.2rem 0 .6rem;font-size:.75rem;">暂无设备。使用右下角 “＋” 添加。</p>
+    <p class="text-dim" style="margin:.2rem 0 .6rem;font-size:.75rem;">暂无设备。使用右下角 “+” 添加。</p>
 </div>
 
 <div class="grid" th:if="${!#lists.isEmpty(devices)}" id="deviceGridInitial">
@@ -37,6 +45,9 @@
         </div>
         <div class="device-title" style="display:flex;align-items:center;gap:.4rem;margin:0 0 .1rem;">
             <h3 th:text="${dev.deviceName}" style="margin:0;padding-right:2.2rem;">设备</h3>
+            <!-- 新增: 设备级活跃预警计数徽章 (初始隐藏) -->
+            <span class="dev-alert-badge" th:attr="data-device=${dev.deviceId}" data-count="0" style="display:none;" title="活跃预警" aria-label="活跃预警" role="button" tabindex="0"
+                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDeviceAlerts(this.getAttribute('data-device'));}" onclick="openDeviceAlerts(this.getAttribute('data-device'))"></span>
             <button type="button" class="btn-icon edit-only" title="编辑设备" aria-label="编辑设备" th:onclick="|openEditDevice(${dev.deviceId});event.stopPropagation();|">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5V20h2.5L17.81 8.69a1 1 0 0 0 0-1.41L15.72 5.19a1 1 0 0 0-1.41 0L5.5 14.5M13.5 6.5l2 2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="visually-hidden">编辑设备</span>
@@ -358,6 +369,7 @@
     <button class="fab-main" id="fabMain" type="button" aria-label="添加设备" onclick="openAddDeviceModal()">＋</button>
 </div>
 
+<script th:src="@{/js/alerts-enhanced.js?v=20251022b}" src="/js/alerts-enhanced.js?v=20251022b" defer></script>
 <script th:src="@{/js/data-dashboard.js?v=20251015e}" src="/js/data-dashboard.js?v=20251015e" defer></script>
 </body>
 </html>

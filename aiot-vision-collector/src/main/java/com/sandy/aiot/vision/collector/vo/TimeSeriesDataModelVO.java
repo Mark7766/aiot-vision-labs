@@ -29,7 +29,7 @@ public class TimeSeriesDataModelVO {
     @AllArgsConstructor
     public static class PredictionPoint {
         private LocalDateTime timestamp;
-        private Float value;
+        private Double value;
     }
 
     public TimeSeriesDataModelRsp toTimeSeriesDataModelRsp() {
