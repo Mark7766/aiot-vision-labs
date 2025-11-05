@@ -4,7 +4,6 @@ import com.sandy.aiot.vision.collector.entity.DataRecord;
 import com.sandy.aiot.vision.collector.entity.Device;
 import com.sandy.aiot.vision.collector.entity.Tag;
 import com.sandy.aiot.vision.collector.repository.DeviceRepository;
-import com.sandy.aiot.vision.collector.repository.TagRepository;
 import com.sandy.aiot.vision.collector.service.CollectorService;
 import com.sandy.aiot.vision.collector.service.DataStorageService;
 import com.sandy.aiot.vision.collector.tools.OpcuaUriParser;
@@ -14,6 +13,7 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
+import org.eclipse.milo.opcua.sdk.client.OpcUaSession;
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfig;
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem;
@@ -39,6 +39,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -55,9 +56,9 @@ public class CollectorServiceBySub implements CollectorService {
     private final DeviceRepository deviceRepository;
     private final DataStorageService dataStorageService;
 
-    private final Map<Long, OpcUaClient> opcUaClients = new ConcurrentHashMap<>();
+    private final Map<Device, OpcUaClient> opcUaClients = new ConcurrentHashMap<>();
     private static final Map<Long,Map<NodeId, Tag>> DEVICE_NODE_TAG_MAP = new ConcurrentHashMap<>();
-    private static final Map<Long,Map<NodeId, UaSubscription>> DEVICE_NODE_SUB_MAP = new ConcurrentHashMap<>();
+    private static final Map<Device,Map<NodeId, UaSubscription>> DEVICE_NODE_SUB_MAP = new ConcurrentHashMap<>();
 
     @PreDestroy
     public void shutdown() {
@@ -70,13 +71,74 @@ public class CollectorServiceBySub implements CollectorService {
         opcUaClients.clear();
     }
 
-    private OpcUaClient updateClient(Device device) throws Exception {
-        invalidateClient(device.getId());
-        return getOrCreateClient(device);
+
+    private void delDevice(Device delDevice) throws Exception {
+        cancelSubscription(delDevice);
+        DEVICE_NODE_TAG_MAP.remove(delDevice.getId());
+    }
+    private void doSub() throws Exception {
+        List<Device> devices = deviceRepository.findAllWithTags();
+        if (devices.isEmpty()) {
+            if(!DEVICE_NODE_SUB_MAP.isEmpty()){
+                cancelAllSubscription();
+                shutdown();
+                DEVICE_NODE_TAG_MAP.clear();
+                DEVICE_NODE_SUB_MAP.clear();
+            }
+            if(!opcUaClients.isEmpty()){
+                opcUaClients.forEach((device,client)->{
+                    client.disconnect();
+                });
+                opcUaClients.clear();
+            }
+            return;
+        }
+        for (Device device : devices) {
+            List<Tag> tags = device.getTags();
+            if (tags == null || tags.isEmpty()) {
+                cancelSubscription(device);
+                continue;
+            }
+            if (isOpcUa(device.getConnectionString())) {
+                doSubOpcUaCollect(device, tags);
+            }
+        }
+        Map<Device,Device> mapDevice =new HashMap<>();
+        devices.forEach(device->mapDevice.put(device,device));
+       if(!DEVICE_NODE_SUB_MAP.isEmpty()){
+           List<Device> delDevices=new ArrayList<>();
+           DEVICE_NODE_SUB_MAP.forEach((device,map)->{
+               if(!devices.contains(device)){
+                   delDevices.add(device);
+               }
+           });
+           if(!opcUaClients.isEmpty()){
+               opcUaClients.forEach((device,client)->{
+                   Device deviceFromDB = mapDevice.get(device);
+                   if(!deviceFromDB.getConnectionString().equals(device.getConnectionString())){
+                       try {
+                           updateClient(mapDevice.get(device));
+                       } catch (Exception e) {
+                           throw new RuntimeException(e);
+                       }
+                   }
+               });
+           }
+           for (Device delDevice : delDevices) {
+               delDevice(delDevice);
+           }
+       }
     }
 
+    private void updateClient(Device device) throws Exception {
+        invalidateClient(device);
+        cancelSubscription(device);
+        getOrCreateClient(device);
+    }
+
+
     private OpcUaClient getOrCreateClient(Device device) throws Exception {
-        return opcUaClients.compute(device.getId(), (id, existing) -> {
+        return opcUaClients.compute(device, (id, existing) -> {
             try {
                 if (existing != null) {
                     return existing;
@@ -101,22 +163,15 @@ public class CollectorServiceBySub implements CollectorService {
                 // Create and connect the client
                 OpcUaClient c = OpcUaClient.create(configBuilder.build());
                 c.connect().get();
-
                 return c;
             } catch (Exception e) {
-                if (existing != null) {
-                    try {
-                        existing.disconnect().get();
-                    } catch (Exception ignore) {
-                    }
-                }
                 throw new CompletionException(e);
             }
         });
     }
 
-    private void invalidateClient(Long deviceId) {
-        OpcUaClient c = opcUaClients.remove(deviceId);
+    private void invalidateClient(Device device) {
+        OpcUaClient c = opcUaClients.remove(device);
         if (c != null) {
             try {
                 c.disconnect().get();
@@ -130,49 +185,17 @@ public class CollectorServiceBySub implements CollectorService {
         doSub();
     }
 
-    private void doSub() throws Exception {
-        List<Device> devices = deviceRepository.findAllWithTags();
-        if (devices.isEmpty()) {
-            if(!DEVICE_NODE_SUB_MAP.isEmpty()){
-                cancelAllSubscription();
-                shutdown();
-                DEVICE_NODE_TAG_MAP.clear();
-                DEVICE_NODE_SUB_MAP.clear();
-            }
-            return;
-        }
-        for (Device device : devices) {
-            List<Tag> tags = device.getTags();
-            if (tags == null || tags.isEmpty()) {
-                cancelSubscription(device);
-                continue;
-            }
-            if (isOpcUa(device.getConnectionString())) {
-                doSubOpcUaCollect(device, tags);
-            }
-        }
-       List<Device> delDevices=new ArrayList<>();
-        DEVICE_NODE_SUB_MAP.forEach((deviceId,map)->{
-            Device device = Device.builder().id(deviceId).build();
-            if(!devices.contains(device)){
-                delDevices.add(device);
-            }
-        });
-        for (Device delDevice : delDevices) {
-            cancelSubscription(delDevice);
-            DEVICE_NODE_TAG_MAP.remove(delDevice.getId());
-        }
 
-    }
 
     private void cancelSubscription(Device delDevice) throws Exception {
         Long deviceId = delDevice.getId();
         if(DEVICE_NODE_SUB_MAP.containsKey(deviceId)){
             Map<NodeId, UaSubscription> map = DEVICE_NODE_SUB_MAP.remove(deviceId);
+            Map<NodeId, Tag> nodeIdTagMap = DEVICE_NODE_TAG_MAP.remove(deviceId);
             for (Map.Entry<NodeId, UaSubscription> entry : map.entrySet()) {
                 NodeId nodeId = entry.getKey();
                 UaSubscription sub = entry.getValue();
-                Tag tag = DEVICE_NODE_TAG_MAP.remove(deviceId).remove(nodeId);
+                Tag tag = nodeIdTagMap.remove(nodeId);
                 cancelSubscription(delDevice, sub, tag);
             }
         }
@@ -180,14 +203,14 @@ public class CollectorServiceBySub implements CollectorService {
 
 
     private void cancelAllSubscription() throws Exception {
-        for (Map.Entry<Long, Map<NodeId, UaSubscription>> e : DEVICE_NODE_SUB_MAP.entrySet()) {
-            Long deviceId = e.getKey();
+        for (Map.Entry<Device, Map<NodeId, UaSubscription>> e : DEVICE_NODE_SUB_MAP.entrySet()) {
+            Device device = e.getKey();
             Map<NodeId, UaSubscription> map = e.getValue();
-            Device device = Device.builder().id(deviceId).build();
+            Map<NodeId, Tag> nodeIdTagMap = DEVICE_NODE_TAG_MAP.remove(device.getId());
             for (Map.Entry<NodeId, UaSubscription> entry : map.entrySet()) {
                 NodeId nodeId = entry.getKey();
                 UaSubscription sub = entry.getValue();
-                Tag tag = DEVICE_NODE_TAG_MAP.remove(deviceId).remove(nodeId);
+                Tag tag = nodeIdTagMap.remove(nodeId);
                 cancelSubscription(device, sub, tag);
             }
         }
@@ -201,15 +224,17 @@ public class CollectorServiceBySub implements CollectorService {
         try {
             List<NodeId> nodeIds = new ArrayList<>();
             Map<NodeId, Tag> deviceNodeTagMap = DEVICE_NODE_TAG_MAP.computeIfAbsent(device.getId(), k -> new HashMap<>());
-            Map<NodeId, UaSubscription> deviceNodeSubMap = DEVICE_NODE_SUB_MAP.computeIfAbsent(device.getId(), k -> new HashMap<>());
+            Map<NodeId, UaSubscription> deviceNodeSubMap = DEVICE_NODE_SUB_MAP.computeIfAbsent(device, k -> new HashMap<>());
             for (Tag tag : tags) {
                 try {
                     NodeId nodeId = NodeId.parse(tag.getAddress());
                     nodeIds.add(nodeId);
                     if (!deviceNodeTagMap.containsKey(nodeId)) {
-                        deviceNodeTagMap.put(nodeId, tag);
-                        UaSubscription subscription= createSubscription(device,nodeId,tag);
-                        deviceNodeSubMap.put(nodeId,subscription);
+                        Optional<UaSubscription> optionalUaSubscription = createSubscription(device, nodeId, tag);
+                        optionalUaSubscription.ifPresent(uaSubscription -> {
+                            deviceNodeSubMap.put(nodeId, uaSubscription);
+                            deviceNodeTagMap.put(nodeId, tag);
+                        });
                     }
                 } catch (Exception parseEx) {
                     log.warn("Failed to parse address for device={} tag={} addr={} error={}",
@@ -243,15 +268,19 @@ public class CollectorServiceBySub implements CollectorService {
         return  tags;
     }
 
-    private UaSubscription createSubscription(Device device, NodeId nodeId, Tag tag) throws Exception {
-        OpcUaClient client = getOrCreateClient(device);
-        UaSubscription uaSubscription = client.getSubscriptionManager().createSubscription(1000.0).get();
-        List<MonitoredItemCreateRequest> requests = new ArrayList<>();
-        requests.add(buildMonitoredItemRequest(nodeId));
-        uaSubscription.createMonitoredItems(TimestampsToReturn.Both, requests, (item, id) ->
-                item.setValueConsumer(this::handleValueUpdate));
-        log.info("Device {} added {} new subscription nodes", device.getName(), tag);
-        return uaSubscription;
+    private Optional<UaSubscription> createSubscription(Device device, NodeId nodeId, Tag tag) throws Exception {
+        Optional<UaSubscription> optionalUaSubscription= Optional.empty();
+       if(isConnectionOk(device)){
+            OpcUaClient client = getOrCreateClient(device);
+            UaSubscription uaSubscription = client.getSubscriptionManager().createSubscription(1000.0).get();
+            List<MonitoredItemCreateRequest> requests = new ArrayList<>();
+            requests.add(buildMonitoredItemRequest(nodeId));
+            uaSubscription.createMonitoredItems(TimestampsToReturn.Both, requests, (item, id) ->
+                    item.setValueConsumer(this::handleValueUpdate));
+           optionalUaSubscription=Optional.of(uaSubscription);
+            log.info("Device {} added {} new subscription nodes", device.getName(), tag);
+        }
+        return optionalUaSubscription;
     }
     private void cancelSubscription(Device device, UaSubscription subscription, Tag tag) throws Exception {
         if (subscription != null) {
@@ -308,7 +337,7 @@ public class CollectorServiceBySub implements CollectorService {
 
     private void processCollectionException(Device device, Exception ex) {
         String rawMsg = ex.getMessage();
-        invalidateClient(device.getId());
+        invalidateClient(device);
         log.error("Data collection failed for device={} error={}:{}",
                 device.getName(), ex.getClass().getSimpleName(), rawMsg);
     }
@@ -347,12 +376,13 @@ public class CollectorServiceBySub implements CollectorService {
         return tagValueVOS;
     }
 
+
+
     @Override
     public boolean isConnectionOk(Device device) {
         try {
             OpcUaClient client = getOrCreateClient(device);
-            List<DataValue> dataValues = client.readValues(0, TimestampsToReturn.Source,
-                    List.of(Identifiers.Server_ServerStatus)).get();
+            OpcUaSession session = client.getSession().get();
             return true;
         } catch (Exception e) {
             log.error("Connection test failed for device={} error={}:{}",
