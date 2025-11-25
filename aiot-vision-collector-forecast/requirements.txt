@@ -1,0 +1,5 @@
+flask==3.1.2
+torch==2.8.0
+transformers==4.56.2
+numpy==2.3.3
+chronos-forecasting==1.5.3

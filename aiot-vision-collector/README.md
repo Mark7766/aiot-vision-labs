@@ -6,16 +6,19 @@
 
 ---
 ## 功能特性
-- OPC UA设备(Device)管理：新增 / 修改 / 删除
-- Tag管理：按设备维护采集点（可快速添加）
-- 实时快照：展示每个设备最近一次采集时间、连接状态、各Tag最新值
-- 历史查询：单个Tag指定分钟窗口历史数据
-- 预测接口：聚合历史数据 + 调用外部预测 API 返回预测结果
-- OPC UA 名称空间与节点浏览
-- REST/JSON API + Web 可视化页面
-- OpenAPI 文档
-- 可通过环境变量快速重写核心配置，便于容器化/云部署
-- Docker 镜像构建脚本
+- **OPC UA设备(Device)管理**：新增 / 修改 / 删除设备
+- **Tag管理**：按设备维护采集点（支持快速添加、修改、删除）
+- **实时快照**：展示每个设备最近一次采集时间、连接状态、各Tag最新值
+- **历史查询**：单个Tag指定分钟窗口历史数据查询
+- **预测接口**：聚合历史数据 + 调用外部预测 API 返回预测结果
+- **预测缓存**：定时预取预测结果，提升查询性能
+- **智能预警**：基于预测偏差的自动预警功能，支持活动预警列表、统计和确认/忽略操作
+- **预警监控大屏**：简约风格的预警大屏展示页面（/alerts/board）
+- **OPC UA 名称空间与节点浏览**：支持浏览设备命名空间和节点
+- **REST/JSON API + Web 可视化页面**
+- **OpenAPI 文档**：集成 Swagger UI
+- **环境变量配置**：可通过环境变量快速重写核心配置，便于容器化/云部署
+- **Docker 支持**：提供 Dockerfile 和构建脚本
 
 ---
 ## 技术栈
@@ -94,10 +97,20 @@ mvn spring-boot:run
 | AVC_H2_CONSOLE_ENABLED | 启用 H2 控制台 | true |
 | AVC_PREDICT_API_URL | 预测服务 URL | http://localhost:50000/predict |
 | AVC_PREDICT_API_PREDICTION_LENGTH | 预测点数 | 60 |
-| AVC_PREDICT_API_HISTORY_LENGTH | 发送给预测服务的历史点数 | 180 |
+| AVC_PREDICT_API_HISTORY_LENGTH | 发送给预测服务的历史点数 | 300 |
+| AVC_PREDICT_CACHE_ENABLED | 启用预测缓存 | true |
+| AVC_PREDICT_CACHE_PREFETCH_INTERVAL_MS | 预测缓存预取间隔（毫秒） | 30000 |
+| AVC_PREDICT_CACHE_MIN_AHEAD_MINUTES | 预测缓存最少提前分钟数 | 2 |
+| AVC_PREDICT_CACHE_TOLERANCE_MS | 预测缓存时间匹配容差（毫秒） | 30000 |
+| AVC_PREDICT_CACHE_MAX_POINTS_PER_TAG | 每个Tag最大缓存点数 | 5000 |
 | AVC_DATA_API_HISTORY_LIMIT | REST 历史查询最大条数 | 200 |
 | AVC_DATA_VIEW_LATEST_MINUTES_WINDOW | Web 快照窗口（分钟） | 5 |
 | AVC_DATA_TAG_HISTORY_DEFAULT_MINUTES | Tag 历史页面默认分钟 | 3 |
+| AVC_ALERT_ENABLED | 启用预警功能 | true |
+| AVC_ALERT_SCAN_INTERVAL_MS | 预警扫描间隔（毫秒） | 60000 |
+| AVC_ALERT_DUP_SUPPRESS_MINUTES | 重复预警抑制时间（分钟） | 5 |
+| AVC_ALERT_PREDICTION_ENABLED | 启用基于预测的偏差预警 | true |
+| AVC_ALERT_DEVIATION_PERCENT_THRESHOLD | 偏差百分比阈值 | 10 |
 | AVC_IOTDB_HOST | IoTDB 主机 | 127.0.0.1 |
 | AVC_IOTDB_PORT | IoTDB 端口 | 6667 |
 | AVC_IOTDB_USERNAME | IoTDB 用户 | root |
@@ -106,105 +119,136 @@ mvn spring-boot:run
 | AVC_IOTDB_RT_TTL | TTL 毫秒 | 86400000 |
 | AVC_LOGGING_LEVEL_APP | 应用日志级别 | INFO |
 
-示例（Windows CMD）：
-```
-set AVC_SERVER_PORT=9090
-set AVC_PREDICT_API_URL=http://192.168.1.100:50000/predict
+示例（Windows PowerShell）：
+```powershell
+$env:AVC_SERVER_PORT=9090
+$env:AVC_PREDICT_API_URL="http://192.168.1.100:50000/predict"
 mvn spring-boot:run
 ```
 
 ---
 ## Docker 使用
 1. 构建镜像 (脚本使用当前目录 Dockerfile)：
-```
+```bash
 sh docker_image_build.sh
 ```
 或手动：
-```
-docker build -t aiot-vision-collector:latest .
+```bash
+mvn clean package -Dmaven.test.skip=true
+docker build -t avc-server:1.0.0-rc9 .
 ```
 2. 运行容器（映射数据目录与端口）：
+```powershell
+docker run -d --name avc `
+  -p 8080:8080 `
+  -e AVC_IOTDB_HOST=192.168.1.4 `
+  -e AVC_PREDICT_API_URL=http://192.168.1.4:50000/predict `
+  -v ${PWD}/data:/data `
+  avc-server:1.0.0-rc9
 ```
-docker run -d --name avc \
-  -p 8080:8080 \
-  -e AVC_PREDICT_API_URL=http://host.docker.internal:50000/predict \
-  -v %CD%/data:/app/data \
-  aiot-vision-collector:latest
-```
-(Windows PowerShell 将 %CD% 换为 ${PWD})
 
 3. 查看日志：
-```
+```bash
 docker logs -f avc
 ```
 
 ---
 ## 核心使用流程
 1. 打开 http://localhost:8080/data 初始可能无设备
-2. 通过页面或 API 添加设备提供 name、protocol(opcua)、connectionString (OPC UA 连接串 如: opc.tcp://127.0.0.1:53530/OPCUA/SimulationServer)
+2. 通过页面或 API 添加设备，提供 name、protocol(opcua)、connectionString（OPC UA 连接串，如: opc.tcp://127.0.0.1:53530/OPCUA/SimulationServer）
 3. 浏览 Namespace（调用 `/data/api/{deviceId}/namespaces` 和 `/data/api/{deviceId}/namespaces/{nsIndex}/tags`）选择需要的节点地址
 4. 快速添加 Tag（地址即 OPC UA 节点 ID）
 5. 页面将周期刷新显示最新值；预测功能会对已存储历史点进行组合调用外部预测服务
+6. 访问 `/alerts/board` 查看预警监控大屏，了解系统预警状态
 
 ---
 ## 主要 REST API 列表（节选）
 所有响应为 JSON（除重定向与 HTML 页面）。示例 curl：
 
+**数据查询接口**：
 - 获取实时快照：
-```
+```bash
 curl http://localhost:8080/data/api/latest
 ```
 - 获取 Tag 历史：
-```
-curl http://localhost:8080/data/api/history/1/10
+```bash
+curl http://localhost:8080/data/api/history/{deviceId}/{tagId}
 ```
 - 预测：
+```bash
+curl http://localhost:8080/data/api/predict/{deviceId}/{tagId}
 ```
-curl http://localhost:8080/data/api/predict/1/10
-```
-- 查询命名空间：
-```
-curl http://localhost:8080/data/api/1/namespaces
-```
-- 查询命名空间 Tag：
-```
-curl http://localhost:8080/data/api/1/namespaces/0/tags
-```
+
+**设备管理接口**：
 - 添加设备：
-```
+```bash
 curl -X POST http://localhost:8080/data/api/devices \
   -H "Content-Type: application/json" \
   -d '{"name":"DeviceA","protocol":"opcua","connectionString":"opc.tcp://127.0.0.1:4840"}'
 ```
 - 更新设备：
-```
-curl -X PUT http://localhost:8080/data/api/devices/1 \
+```bash
+curl -X PUT http://localhost:8080/data/api/devices/{deviceId} \
   -H "Content-Type: application/json" \
   -d '{"name":"DeviceA2","protocol":"opcua","connectionString":"opc.tcp://127.0.0.1:4840"}'
 ```
 - 删除设备：
+```bash
+curl -X DELETE http://localhost:8080/data/api/devices/{deviceId}
 ```
-curl -X DELETE http://localhost:8080/data/api/devices/1
-```
+
+**Tag管理接口**：
 - 列出某设备 Tag：
-```
-curl http://localhost:8080/data/api/1/tags
+```bash
+curl http://localhost:8080/data/api/{deviceId}/tags
 ```
 - 快速添加 Tag：
-```
-curl -X POST http://localhost:8080/data/api/1/tags \
+```bash
+curl -X POST http://localhost:8080/data/api/{deviceId}/tags \
   -H "Content-Type: application/json" \
   -d '{"name":"Temp","address":"ns=2;i=10845"}'
 ```
 - 更新 Tag：
-```
-curl -X PUT http://localhost:8080/data/api/1/tags/10 \
+```bash
+curl -X PUT http://localhost:8080/data/api/{deviceId}/tags/{tagId} \
   -H "Content-Type: application/json" \
   -d '{"name":"Temp2","address":"ns=2;i=10845"}'
 ```
 - 删除 Tag：
+```bash
+curl -X DELETE http://localhost:8080/data/api/{deviceId}/tags/{tagId}
 ```
-curl -X DELETE http://localhost:8080/data/api/1/tags/10
+
+**OPC UA浏览接口**：
+- 查询命名空间：
+```bash
+curl http://localhost:8080/data/api/{deviceId}/namespaces
+```
+- 查询命名空间 Tag：
+```bash
+curl http://localhost:8080/data/api/{deviceId}/namespaces/{nsIndex}/tags
+```
+
+**预警接口**：
+- 获取活动预警列表：
+```bash
+curl http://localhost:8080/data/api/alerts
+```
+- 获取最近预警列表：
+```bash
+curl http://localhost:8080/data/api/alerts/recent
+```
+- 获取预警统计信息：
+```bash
+curl http://localhost:8080/data/api/alerts/stats
+```
+- 确认预警：
+```bash
+curl -X POST http://localhost:8080/data/api/alerts/{alertId}/ack
+```
+- 忽略预警：
+```bash
+curl -X POST http://localhost:8080/data/api/alerts/{alertId}/ignore
 ```
 
 更多字段说明请访问 OpenAPI UI。
@@ -212,20 +256,31 @@ curl -X DELETE http://localhost:8080/data/api/1/tags/10
 ---
 ## 预测服务对接说明
 应用不会自行训练模型，而是将一段历史数据（长度由 `AVC_PREDICT_API_HISTORY_LENGTH` 控制）发送到 `AVC_PREDICT_API_URL`，期望返回预测序列（长度 `AVC_PREDICT_API_PREDICTION_LENGTH`）。若预测失败或异常，接口返回空结构（TimeSeriesDataModelRsp.empty()）。
-预测服务工程地址:https://github.com/Mark7766/python-machine-learning-examples/tree/main/iot_forecast_api
+
+**预测缓存机制**：
+- 系统通过 `PredictionCacheService` 定期预取预测结果，避免每次查询时实时调用预测服务
+- 缓存配置参数：
+  - `AVC_PREDICT_CACHE_ENABLED`：启用/禁用预测缓存（默认 true）
+  - `AVC_PREDICT_CACHE_PREFETCH_INTERVAL_MS`：预取间隔（默认 30 秒）
+  - `AVC_PREDICT_CACHE_MIN_AHEAD_MINUTES`：预测覆盖最少提前分钟数（默认 2 分钟）
+  - `AVC_PREDICT_CACHE_TOLERANCE_MS`：时间匹配容差（默认 30 秒）
+  - `AVC_PREDICT_CACHE_MAX_POINTS_PER_TAG`：每个Tag最大缓存点数（默认 5000）
+
+[预测服务工程地址](../aiot-vision-collector-forecast)
+
 集成建议：
 - 确保预测服务可用并按约定返回 JSON
 - 使用健康探测脚本定期检测预测端
-- 在容器中通过环境变量指向预测服务（host.docker.internal 等）
+- 在容器中通过环境变量指向预测服务（如 192.168.1.4:50000）
 
 ---
 ## 测试
 运行全部测试：
-```
+```bash
 mvn test
 ```
 生成覆盖率（可自行集成 Jacoco）：
-```
+```bash
 mvn clean test
 ```
 
@@ -246,7 +301,7 @@ mvn clean test
 5. Lombok 注解未生效（IDE 报错）
    - 处理：安装 Lombok 插件并启用 Annotation Processing。
 6. Docker 映射数据未持久化
-   - 处理：确保 `-v <host>/data:/app/data`（镜像中工作目录若不同需与 Dockerfile 保持一致），检查容器内写权限。
+   - 处理：确保 `-v <host>/data:/data`（映射到容器的 /data 目录），检查容器内写权限。
 7. 时序写入/IoTDB 相关异常
    - 处理：确认 IoTDB 服务在线、用户名密码正确；必要时降低批量写频率或增加日志级别 DEBUG 检查细节。
 8. OpenAPI 页面 404
@@ -256,10 +311,9 @@ mvn clean test
 10. Windows 路径编码问题
     - 处理：确认系统默认编码 UTF-8；必要时在 JVM 启动参数加 `-Dfile.encoding=UTF-8`。
 
-收集日志：
-```
-# 临时提升日志等级
-set AVC_LOGGING_LEVEL_APP=DEBUG
+收集日志（Windows PowerShell）：
+```powershell
+$env:AVC_LOGGING_LEVEL_APP="DEBUG"
 mvn spring-boot:run
 ```
 
@@ -276,15 +330,6 @@ mvn spring-boot:run
 - 添加缓存：可在读取最新值时引入 Caffeine/Redis
 - 预测调用：可异步化 + 结果缓存
 - 水平扩展：外置数据库 + 共享缓存，前置负载均衡
-
----
-## 未来可拓展方向 (Backlog 建议)
-- 多协议接入 (Modbus, MQTT)
-- 异步采集任务调度 / 批量写入缓冲
-- 告警规则引擎
-- 用户/权限管理
-- Grafana/Prometheus 集成
-- WebSocket 实时推送
 
 ---
 ## 发布与版本
@@ -304,7 +349,7 @@ Copyright (c) <Year> <Owner>
 ## 贡献指南 (简要)
 1. Fork & 新建分支 feature/xxx
 2. 编码并补充测试
-3. 通过 `mvn -q -DskipTests=false test` 确认通过
+3. 通过 `mvn test` 确认通过
 4. 提交 PR，描述变更与影响
 
 ---
@@ -318,38 +363,40 @@ Copyright (c) <Year> <Owner>
 ---
 ## 预警监控大屏 (Alerts Board)
 
-新增页面: `/alerts/board`
+访问页面：`/alerts/board`
 
-设计原则 (Apple 简约风):
-- 信息聚焦: 只保留核心指标 (活动预警数、24h新增、严重级别分布、近12小时趋势)。
-- 视觉克制: 同一配色体系下的少量强调色 (Accent / Danger / Warn / OK)。
-- 层次清晰: 栅格化卡片 + 轻量阴影，不使用复杂装饰。
-- 动态刷新: 前端每 10 秒自动拉取最新统计与活动预警列表，页面隐藏时暂停刷新以降低资源消耗。
+设计原则（简约风格）：
+- **信息聚焦**：只保留核心指标（活动预警数、24h新增、严重级别分布、近12小时趋势）
+- **视觉克制**：统一配色体系下的少量强调色（Accent / Danger / Warn / OK）
+- **层次清晰**：栅格化卡片 + 轻量阴影，不使用复杂装饰
+- **动态刷新**：前端每 10 秒自动拉取最新统计与活动预警列表，页面隐藏时暂停刷新以降低资源消耗
 
-主要 REST 接口:
-- `GET /data/api/alerts` 活动预警列表
-- `GET /data/api/alerts/stats` 统计指标 (活动数量、24h新增、严重级别分布、近12小时趋势)
-- `POST /data/api/alerts/{id}/ack` 确认预警
-- `POST /data/api/alerts/{id}/ignore` 忽略预警
+主要 REST 接口：
+- `GET /data/api/alerts` - 活动预警列表
+- `GET /data/api/alerts/recent` - 最近预警列表
+- `GET /data/api/alerts/stats` - 统计指标（活动数量、24h新增、严重级别分布、近12小时趋势）
+- `POST /data/api/alerts/{id}/ack` - 确认预警
+- `POST /data/api/alerts/{id}/ignore` - 忽略预警
 
-统计结构示例:
+统计结构示例：
 ```json
 {
   "activeCount": 3,
   "recent24hCount": 15,
   "severityActive": {"HIGH":1, "MEDIUM":1, "LOW":1},
   "severityRecent24h": {"HIGH":4, "MEDIUM":6, "LOW":5},
-  "hourStats": [ {"hour":"08:00","count":2}, ... ]
+  "hourStats": [
+    {"hour":"08:00","count":2},
+    {"hour":"09:00","count":3}
+  ]
 }
 ```
 
-前端文件: `src/main/resources/static/js/alert-board.js`
-样式扩展: `app.css` 中新增 `.board-*` / `.severity-chip` / `.alert-item-row` 等选择器。
+前端文件：
+- `src/main/resources/static/js/alerts-enhanced.js` - 预警大屏交互逻辑
+- `src/main/resources/templates/alerts-board.html` - 预警大屏页面模板
+- `src/main/resources/static/css/app.css` - 样式定义（`.board-*` / `.severity-chip` / `.alert-item-row` 等）
 
-可扩展点:
-- 增加筛选 (按设备 / 严重级别) 与分页
-- 添加 WebSocket 推送替代轮询
-- 国际化 (message / severity 标签)
-
-测试:
-- `AlertStatsApiTest` 验证统计接口结构 (小时桶固定为 12)。
+测试：
+- `AlertStatsApiTest` 验证统计接口结构（小时桶固定为 12）
+- `AlertBoardViewControllerTest` 验证页面访问
