@@ -1,103 +1,105 @@
 # AIoT Vision Collector Forecast
 
-基于 Chronos-T5 模型的物联网时序数据预测 API 服务。
+English | [简体中文](./README_zh.md)
 
-## 项目简介
+IoT time-series data prediction API service based on Chronos-T5 model.
 
-本项目提供了一个轻量级的时序数据预测 REST API 服务，使用 Amazon 的 Chronos-T5-Tiny 预训练模型进行时间序列预测。适用于物联网设备数据采集后的趋势预测、异常检测等场景。
+## Project Overview
 
-## 功能特性
+This project provides a lightweight time-series data prediction REST API service using Amazon's Chronos-T5-Tiny pre-trained model for time series forecasting. Suitable for trend prediction, anomaly detection and other scenarios after IoT device data collection.
 
-- 🚀 基于预训练的 Chronos-T5-Tiny 模型，无需训练即可使用
-- 📊 支持任意长度的历史时序数据输入
-- 🔮 灵活的预测长度配置
-- 🐳 完整的 Docker 容器化支持
-- 🏥 内置健康检查机制
-- 🔒 非 root 用户运行，安全性更高
+## Features
 
-## 技术栈
+- 🚀 Based on pre-trained Chronos-T5-Tiny model, ready to use without training
+- 📊 Supports arbitrary length historical time-series data input
+- 🔮 Flexible prediction length configuration
+- 🐳 Complete Docker containerization support
+- 🏥 Built-in health check mechanism
+- 🔒 Runs as non-root user for enhanced security
+
+## Tech Stack
 
 - **Python**: 3.13
-- **Web 框架**: Flask 3.1.2
-- **深度学习框架**: PyTorch 2.8.0
-- **预测模型**: Chronos-Forecasting 1.5.3
-- **其他依赖**: Transformers 4.56.2, NumPy 2.3.3
+- **Web Framework**: Flask 3.1.2
+- **Deep Learning Framework**: PyTorch 2.8.0
+- **Prediction Model**: Chronos-Forecasting 1.5.3
+- **Other Dependencies**: Transformers 4.56.2, NumPy 2.3.3
 
-## 项目结构
+## Project Structure
 
 ```
 aiot-vision-collector-forecast/
-├── avc_forecast.py          # Flask API 服务主程序
-├── requirements.txt         # Python 依赖清单
-├── Dockerfile              # Docker 镜像构建文件
-├── docker_build.sh         # Docker 构建脚本
-├── docker_run.sh           # Docker 运行脚本
-├── chronos-t5-tiny/        # 本地预训练模型目录
+├── avc_forecast.py          # Flask API service main program
+├── requirements.txt         # Python dependencies
+├── Dockerfile              # Docker image build file
+├── docker_build.sh         # Docker build script
+├── docker_run.sh           # Docker run script
+├── chronos-t5-tiny/        # Local pre-trained model directory
 │   ├── config.json
 │   ├── generation_config.json
 │   ├── model.safetensors
 │   └── README.md
-└── README.md               # 项目说明文档
+└── README.md               # Project documentation
 ```
 
-## 快速开始
+## Quick Start
 
-### 方式一：直接运行（Python 环境）
+### Method 1: Direct Run (Python Environment)
 
-#### 1. 安装依赖
+#### 1. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-#### 2. 启动服务
+#### 2. Start Service
 
 ```bash
 python avc_forecast.py
 ```
 
-服务将在 `http://0.0.0.0:50000` 启动。
+Service will start at `http://0.0.0.0:50000`.
 
-### 方式二：Docker 容器运行（推荐）
+### Method 2: Docker Container Run (Recommended)
 
-#### 1. 构建镜像
+#### 1. Build Image
 
 ```bash
 bash docker_build.sh
-# 或直接运行
+# Or directly run
 docker build -t avc-forecast:1.0.0-rc8 .
 ```
 
-#### 2. 运行容器
+#### 2. Run Container
 
 ```bash
 bash docker_run.sh
-# 或直接运行
+# Or directly run
 docker run -d -p 50000:50000 --name avc-forecast avc-forecast:1.0.0-rc8
 ```
 
-#### 3. 查看日志
+#### 3. View Logs
 
 ```bash
 docker logs -f avc-forecast
 ```
 
-#### 4. 停止容器
+#### 4. Stop Container
 
 ```bash
 docker stop avc-forecast
 docker rm avc-forecast
 ```
 
-## API 使用说明
+## API Usage
 
-### 预测接口
+### Prediction Endpoint
 
-**端点**: `POST /predict`
+**Endpoint**: `POST /predict`
 
-**请求头**: `Content-Type: application/json`
+**Request Header**: `Content-Type: application/json`
 
-**请求体**:
+**Request Body**:
 
 ```json
 {
@@ -106,12 +108,12 @@ docker rm avc-forecast
 }
 ```
 
-**参数说明**:
+**Parameters**:
 
-- `data` (必需): 历史时序数据数组，元素类型为浮点数或整数
-- `prediction_length` (必需): 需要预测的未来时间点数量，必须为正整数
+- `data` (required): Historical time-series data array, elements can be floats or integers
+- `prediction_length` (required): Number of future time points to predict, must be a positive integer
 
-**响应示例**:
+**Response Example**:
 
 ```json
 {
@@ -119,7 +121,7 @@ docker rm avc-forecast
 }
 ```
 
-**错误响应**:
+**Error Response**:
 
 ```json
 {
@@ -127,7 +129,7 @@ docker rm avc-forecast
 }
 ```
 
-### 使用示例
+### Usage Examples
 
 #### cURL
 
@@ -175,16 +177,16 @@ fetch(url, {
   .then(json => console.log(json));
 ```
 
-## 环境变量
+## Environment Variables
 
-可在运行时通过环境变量配置：
+Can be configured via environment variables at runtime:
 
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| `MODEL_PATH` | `chronos-t5-tiny` | 模型文件路径 |
-| `PORT` | `50000` | 服务监听端口 |
+| Variable | Default Value | Description |
+|----------|---------------|-------------|
+| `MODEL_PATH` | `chronos-t5-tiny` | Model file path |
+| `PORT` | `50000` | Service listening port |
 
-Docker 运行示例：
+Docker run example:
 
 ```bash
 docker run -d \
@@ -194,9 +196,9 @@ docker run -d \
   avc-forecast:1.0.0-rc8
 ```
 
-## 健康检查
+## Health Check
 
-服务内置健康检查端点，每 30 秒自动检测一次：
+Service has built-in health check endpoint, auto-detected every 30 seconds:
 
 ```bash
 curl -X POST http://localhost:50000/predict \
@@ -204,75 +206,75 @@ curl -X POST http://localhost:50000/predict \
   -d '{"data":[0],"prediction_length":1}'
 ```
 
-返回 200 状态码表示服务正常。
+Returning 200 status code indicates the service is normal.
 
-## 开发说明
+## Development Notes
 
-### 模型说明
+### Model Description
 
-本项目使用 **Chronos-T5-Tiny** 模型，这是一个轻量级的时序预测模型：
+This project uses the **Chronos-T5-Tiny** model, a lightweight time-series prediction model:
 
-- 模型大小：约 70MB
-- 预训练数据：大规模时间序列数据集
-- 支持零样本预测（无需微调）
-- 输出中位数预测结果（50% 分位数）
+- Model size: approximately 70MB
+- Pre-training data: Large-scale time series datasets
+- Supports zero-shot prediction (no fine-tuning required)
+- Outputs median prediction results (50% quantile)
 
-### 自定义开发
+### Custom Development
 
-如需扩展功能，可修改 `avc_forecast.py`：
+To extend functionality, modify `avc_forecast.py`:
 
-1. **添加新端点**: 在 Flask app 中添加新的路由
-2. **自定义预测参数**: 修改 `pipeline.predict()` 的参数
-3. **更换模型**: 替换 `MODEL_PATH` 为其他 Chronos 模型（如 `chronos-t5-small`, `chronos-t5-base`）
+1. **Add new endpoints**: Add new routes in Flask app
+2. **Customize prediction parameters**: Modify `pipeline.predict()` parameters
+3. **Replace model**: Replace `MODEL_PATH` with other Chronos models (e.g., `chronos-t5-small`, `chronos-t5-base`)
 
-## 常见问题
+## FAQ
 
-### 1. 模型加载失败
+### 1. Model Loading Failure
 
-**问题**: `OSError: chronos-t5-tiny does not appear to be a valid repository`
+**Issue**: `OSError: chronos-t5-tiny does not appear to be a valid repository`
 
-**解决**: 确保 `chronos-t5-tiny/` 目录存在且包含所有必需文件（config.json、model.safetensors 等）。
+**Solution**: Ensure `chronos-t5-tiny/` directory exists and contains all required files (config.json, model.safetensors, etc.).
 
-### 2. 内存不足
+### 2. Out of Memory
 
-**问题**: 容器运行时内存溢出
+**Issue**: Container runs out of memory
 
-**解决**: 
-- 使用更小的模型（已是 tiny 版本）
-- 限制预测长度（建议不超过 64）
-- 增加 Docker 容器内存限制：`docker run --memory=2g ...`
+**Solution**: 
+- Use smaller model (already using tiny version)
+- Limit prediction length (recommend not exceeding 64)
+- Increase Docker container memory limit: `docker run --memory=2g ...`
 
-### 3. 预测结果不准确
+### 3. Inaccurate Predictions
 
-**问题**: 预测值偏差较大
+**Issue**: Large prediction value deviation
 
-**解决**:
-- 确保输入数据质量（无异常值、缺失值）
-- 提供足够长的历史数据（建议至少 20 个数据点）
-- 考虑数据归一化处理
-- 根据业务场景选择更大的模型
+**Solution**:
+- Ensure input data quality (no outliers, missing values)
+- Provide sufficient historical data (recommend at least 20 data points)
+- Consider data normalization
+- Choose larger model based on business scenario
 
-## 性能优化
+## Performance Optimization
 
-- **模型预加载**: 服务启动时加载模型到内存，避免每次请求重复加载
-- **CPU 优化**: 默认使用 CPU 推理，适合轻量级部署
-- **GPU 加速**: 如需 GPU 支持，修改 Dockerfile 基础镜像为 `pytorch/pytorch:*-cuda*`
+- **Model Pre-loading**: Load model to memory at service startup, avoid repeated loading per request
+- **CPU Optimization**: Default uses CPU inference, suitable for lightweight deployment
+- **GPU Acceleration**: For GPU support, modify Dockerfile base image to `pytorch/pytorch:*-cuda*`
 
-## 许可证
+## License
 
-本项目为内部开发项目，遵循公司相关许可协议。
+This project is an internal development project and follows the company's related license agreements.
 
-Chronos 模型遵循 Apache 2.0 许可证。
+Chronos model follows Apache 2.0 license.
 
-## 联系方式
+## Contact
 
-如有问题或建议，请联系项目维护团队：
+For issues or suggestions, please contact the project maintenance team:
 
-- 项目仓库: `aiot-vision-labs/aiot-vision-collector-forecast`
-- 问题反馈: 通过 Issue 跟踪系统提交
+- Project Repository: `aiot-vision-labs/aiot-vision-collector-forecast`
+- Issue Feedback: Submit through Issue tracking system
 
 ---
 
-**版本**: 1.0.0-rc8  
-**最后更新**: 2025-11-25
+**Version**: 1.0.0-rc8  
+**Last Updated**: 2025-11-25
 

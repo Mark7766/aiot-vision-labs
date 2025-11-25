@@ -1,40 +1,42 @@
 # AIoT Vision Collector
 
-一个用于采集工业/物联网设备实时点位数据、进行历史存储、展示及调用预测服务的轻量级AI IOT 应用。
+English | [简体中文](./README_zh.md)
 
-提供Web页面与JSON REST API，同时支持通过可插拔的预测服务（HTTP）获取未来时序预测结果。
+A lightweight AI IoT application for collecting real-time point data from industrial/IoT devices, performing historical storage, display, and invoking prediction services.
 
----
-## 功能特性
-- **OPC UA设备(Device)管理**：新增 / 修改 / 删除设备
-- **Tag管理**：按设备维护采集点（支持快速添加、修改、删除）
-- **实时快照**：展示每个设备最近一次采集时间、连接状态、各Tag最新值
-- **历史查询**：单个Tag指定分钟窗口历史数据查询
-- **预测接口**：聚合历史数据 + 调用外部预测 API 返回预测结果
-- **预测缓存**：定时预取预测结果，提升查询性能
-- **智能预警**：基于预测偏差的自动预警功能，支持活动预警列表、统计和确认/忽略操作
-- **预警监控大屏**：简约风格的预警大屏展示页面（/alerts/board）
-- **OPC UA 名称空间与节点浏览**：支持浏览设备命名空间和节点
-- **REST/JSON API + Web 可视化页面**
-- **OpenAPI 文档**：集成 Swagger UI
-- **环境变量配置**：可通过环境变量快速重写核心配置，便于容器化/云部署
-- **Docker 支持**：提供 Dockerfile 和构建脚本
+Provides Web pages and JSON REST API, supports obtaining future time-series prediction results through pluggable prediction service (HTTP).
 
 ---
-## 技术栈
-| 模块 | 技术 |
-| ---- | ---- |
-| 核心框架 | Spring Boot 3.5.6 |
-| 语言 | Java 17 |
-| Web & 模板 | Spring MVC, Thymeleaf |
-| 持久化 | Spring Data JPA, H2 File DB (默认) |
-| 时序/外部 | IoTDB Session 客户端 (可选) |
-| 工业协议 | Eclipse Milo OPC UA 客户端 |
-| 文档 | springdoc-openapi-starter-webmvc-ui |
-| 其它 | Lombok, Maven |
+## Features
+- **OPC UA Device Management**: Add / modify / delete devices
+- **Tag Management**: Maintain collection points by device (support quick add, modify, delete)
+- **Real-time Snapshot**: Display the latest collection time, connection status, and latest values for each device tag
+- **Historical Query**: Query historical data for a single tag within a specified minute window
+- **Prediction Interface**: Aggregate historical data + invoke external prediction API to return prediction results
+- **Prediction Cache**: Periodically prefetch prediction results to improve query performance
+- **Smart Alerts**: Automatic alert function based on prediction deviation, support active alert list, statistics and confirm/ignore operations
+- **Alert Monitoring Dashboard**: Minimalist style alert dashboard page (/alerts/board)
+- **OPC UA Namespace & Node Browsing**: Support browsing device namespaces and nodes
+- **REST/JSON API + Web Visualization Pages**
+- **OpenAPI Documentation**: Integrated Swagger UI
+- **Environment Variable Configuration**: Quickly override core configurations via environment variables for containerization/cloud deployment
+- **Docker Support**: Provides Dockerfile and build scripts
 
 ---
-## 目录结构概览
+## Tech Stack
+| Module | Technology |
+| ------ | ---------- |
+| Core Framework | Spring Boot 3.5.6 |
+| Language | Java 17 |
+| Web & Template | Spring MVC, Thymeleaf |
+| Persistence | Spring Data JPA, H2 File DB (default) |
+| Time-Series/External | IoTDB Session Client (optional) |
+| Industrial Protocol | Eclipse Milo OPC UA Client |
+| Documentation | springdoc-openapi-starter-webmvc-ui |
+| Others | Lombok, Maven |
+
+---
+## Directory Structure Overview
 ```
 project/
   pom.xml
@@ -43,83 +45,83 @@ project/
   docker_container_start.sh
   src/
     main/
-      java/com/sandy/aiot/vision/collector/... (业务代码)
+      java/com/sandy/aiot/vision/collector/... (business code)
       resources/
-        application.yml (默认配置)
-        templates/ (Thymeleaf 页面: data.html 等)
-        static/ (前端静态资源 css/js)
+        application.yml (default configuration)
+        templates/ (Thymeleaf pages: data.html, etc.)
+        static/ (frontend static resources css/js)
     test/
-      java/... (测试用例)
-  data/ (默认 H2 文件数据库目录，运行时生成/持久化)
+      java/... (test cases)
+  data/ (default H2 file database directory, generated/persisted at runtime)
 ```
 
 ---
-## 环境要求
+## Environment Requirements
 - JDK 17+
 - Maven 3.9+
-- 外部预测服务 HTTP Endpoint (默认占位 URL)
-- IoTDB 实例（若启用真实时序落库）
-- Docker 环境（构建/运行容器）
+- External prediction service HTTP Endpoint (default placeholder URL)
+- IoTDB instance (if enabling real time-series storage)
+- Docker environment (build/run containers)
 
 ---
-## 快速开始 (本地)
-1. 克隆源码
-```
+## Quick Start (Local)
+1. Clone source code
+```bash
 git clone <your-repo-url> aiot-vision-collector
 cd aiot-vision-collector
 ```
-2. 编译与运行
-```
+2. Compile and run
+```bash
 mvn clean package -DskipTests
 java -jar target/aiot-vision-collector-0.0.1-SNAPSHOT.jar
 ```
-   或开发模式：
-```
+   Or development mode:
+```bash
 mvn spring-boot:run
 ```
-3. 访问
-- Web 实时与管理页面: http://localhost:8080/data
-- OpenAPI 文档（UI）：http://localhost:8080/swagger-ui/index.html
+3. Access
+- Web real-time and management page: http://localhost:8080/data
+- OpenAPI documentation (UI): http://localhost:8080/swagger-ui/index.html
 
 ---
-## 运行配置（application.yml 可被环境变量覆盖）
-支持通过环境变量前缀 `AVC_` 修改，关键项如下（括号内为默认值）：
+## Runtime Configuration (application.yml can be overridden by environment variables)
+Supports modification via environment variable prefix `AVC_`, key items are as follows (default values in parentheses):
 
-| 环境变量 | 描述 | 默认 |
-| -------- | ---- | ---- |
-| AVC_SERVER_PORT | 应用端口 | 8080 |
+| Environment Variable | Description | Default |
+| -------------------- | ----------- | ------- |
+| AVC_SERVER_PORT | Application port | 8080 |
 | AVC_DATASOURCE_URL | H2 JDBC URL | jdbc:h2:file:./data/visiondb;MODE=MySQL;DB_CLOSE_DELAY=-1 |
-| AVC_DATASOURCE_DRIVER | 驱动类 | org.h2.Driver |
-| AVC_DATASOURCE_USERNAME | 用户名 | sa |
-| AVC_DATASOURCE_PASSWORD | 密码 | (空) |
-| AVC_JPA_DATABASE_PLATFORM | Hibernate 方言 | org.hibernate.dialect.H2Dialect |
-| AVC_JPA_HIBERNATE_DDL_AUTO | DDL 策略 | update |
-| AVC_H2_CONSOLE_ENABLED | 启用 H2 控制台 | true |
-| AVC_PREDICT_API_URL | 预测服务 URL | http://localhost:50000/predict |
-| AVC_PREDICT_API_PREDICTION_LENGTH | 预测点数 | 60 |
-| AVC_PREDICT_API_HISTORY_LENGTH | 发送给预测服务的历史点数 | 300 |
-| AVC_PREDICT_CACHE_ENABLED | 启用预测缓存 | true |
-| AVC_PREDICT_CACHE_PREFETCH_INTERVAL_MS | 预测缓存预取间隔（毫秒） | 30000 |
-| AVC_PREDICT_CACHE_MIN_AHEAD_MINUTES | 预测缓存最少提前分钟数 | 2 |
-| AVC_PREDICT_CACHE_TOLERANCE_MS | 预测缓存时间匹配容差（毫秒） | 30000 |
-| AVC_PREDICT_CACHE_MAX_POINTS_PER_TAG | 每个Tag最大缓存点数 | 5000 |
-| AVC_DATA_API_HISTORY_LIMIT | REST 历史查询最大条数 | 200 |
-| AVC_DATA_VIEW_LATEST_MINUTES_WINDOW | Web 快照窗口（分钟） | 5 |
-| AVC_DATA_TAG_HISTORY_DEFAULT_MINUTES | Tag 历史页面默认分钟 | 3 |
-| AVC_ALERT_ENABLED | 启用预警功能 | true |
-| AVC_ALERT_SCAN_INTERVAL_MS | 预警扫描间隔（毫秒） | 60000 |
-| AVC_ALERT_DUP_SUPPRESS_MINUTES | 重复预警抑制时间（分钟） | 5 |
-| AVC_ALERT_PREDICTION_ENABLED | 启用基于预测的偏差预警 | true |
-| AVC_ALERT_DEVIATION_PERCENT_THRESHOLD | 偏差百分比阈值 | 10 |
-| AVC_IOTDB_HOST | IoTDB 主机 | 127.0.0.1 |
-| AVC_IOTDB_PORT | IoTDB 端口 | 6667 |
-| AVC_IOTDB_USERNAME | IoTDB 用户 | root |
-| AVC_IOTDB_PASSWORD | IoTDB 密码 | root |
-| AVC_IOTDB_RT_DB | 实时库名（示例） | rt |
-| AVC_IOTDB_RT_TTL | TTL 毫秒 | 86400000 |
-| AVC_LOGGING_LEVEL_APP | 应用日志级别 | INFO |
+| AVC_DATASOURCE_DRIVER | Driver class | org.h2.Driver |
+| AVC_DATASOURCE_USERNAME | Username | sa |
+| AVC_DATASOURCE_PASSWORD | Password | (empty) |
+| AVC_JPA_DATABASE_PLATFORM | Hibernate dialect | org.hibernate.dialect.H2Dialect |
+| AVC_JPA_HIBERNATE_DDL_AUTO | DDL strategy | update |
+| AVC_H2_CONSOLE_ENABLED | Enable H2 console | true |
+| AVC_PREDICT_API_URL | Prediction service URL | http://localhost:50000/predict |
+| AVC_PREDICT_API_PREDICTION_LENGTH | Number of prediction points | 60 |
+| AVC_PREDICT_API_HISTORY_LENGTH | Number of history points sent to prediction service | 300 |
+| AVC_PREDICT_CACHE_ENABLED | Enable prediction cache | true |
+| AVC_PREDICT_CACHE_PREFETCH_INTERVAL_MS | Prediction cache prefetch interval (milliseconds) | 30000 |
+| AVC_PREDICT_CACHE_MIN_AHEAD_MINUTES | Prediction cache minimum ahead minutes | 2 |
+| AVC_PREDICT_CACHE_TOLERANCE_MS | Prediction cache time matching tolerance (milliseconds) | 30000 |
+| AVC_PREDICT_CACHE_MAX_POINTS_PER_TAG | Maximum cache points per tag | 5000 |
+| AVC_DATA_API_HISTORY_LIMIT | REST history query max records | 200 |
+| AVC_DATA_VIEW_LATEST_MINUTES_WINDOW | Web snapshot window (minutes) | 5 |
+| AVC_DATA_TAG_HISTORY_DEFAULT_MINUTES | Tag history page default minutes | 3 |
+| AVC_ALERT_ENABLED | Enable alert feature | true |
+| AVC_ALERT_SCAN_INTERVAL_MS | Alert scan interval (milliseconds) | 60000 |
+| AVC_ALERT_DUP_SUPPRESS_MINUTES | Duplicate alert suppression time (minutes) | 5 |
+| AVC_ALERT_PREDICTION_ENABLED | Enable prediction-based deviation alerts | true |
+| AVC_ALERT_DEVIATION_PERCENT_THRESHOLD | Deviation percentage threshold | 10 |
+| AVC_IOTDB_HOST | IoTDB host | 127.0.0.1 |
+| AVC_IOTDB_PORT | IoTDB port | 6667 |
+| AVC_IOTDB_USERNAME | IoTDB username | root |
+| AVC_IOTDB_PASSWORD | IoTDB password | root |
+| AVC_IOTDB_RT_DB | Real-time database name (example) | rt |
+| AVC_IOTDB_RT_TTL | TTL milliseconds | 86400000 |
+| AVC_LOGGING_LEVEL_APP | Application log level | INFO |
 
-示例（Windows PowerShell）：
+Example (Windows PowerShell):
 ```powershell
 $env:AVC_SERVER_PORT=9090
 $env:AVC_PREDICT_API_URL="http://192.168.1.100:50000/predict"
@@ -127,258 +129,258 @@ mvn spring-boot:run
 ```
 
 ---
-## Docker 使用
-1. 构建镜像 (脚本使用当前目录 Dockerfile)：
+## Docker Usage
+1. Build image (script uses current directory Dockerfile):
 ```bash
 sh docker_image_build.sh
 ```
-或手动：
+Or manually:
 ```bash
 mvn clean package -Dmaven.test.skip=true
 docker build -t avc-server:1.0.0-rc9 .
 ```
-2. 运行容器（映射数据目录与端口）：
-```powershell
-docker run -d --name avc `
-  -p 8080:8080 `
-  -e AVC_IOTDB_HOST=192.168.1.4 `
-  -e AVC_PREDICT_API_URL=http://192.168.1.4:50000/predict `
-  -v ${PWD}/data:/data `
+2. Run container (map data directory and port):
+```bash
+docker run -d --name avc \
+  -p 8080:8080 \
+  -e AVC_IOTDB_HOST=192.168.1.4 \
+  -e AVC_PREDICT_API_URL=http://192.168.1.4:50000/predict \
+  -v $(pwd)/data:/data \
   avc-server:1.0.0-rc9
 ```
 
-3. 查看日志：
+3. View logs:
 ```bash
 docker logs -f avc
 ```
 
 ---
-## 核心使用流程
-1. 打开 http://localhost:8080/data 初始可能无设备
-2. 通过页面或 API 添加设备，提供 name、protocol(opcua)、connectionString（OPC UA 连接串，如: opc.tcp://127.0.0.1:53530/OPCUA/SimulationServer）
-3. 浏览 Namespace（调用 `/data/api/{deviceId}/namespaces` 和 `/data/api/{deviceId}/namespaces/{nsIndex}/tags`）选择需要的节点地址
-4. 快速添加 Tag（地址即 OPC UA 节点 ID）
-5. 页面将周期刷新显示最新值；预测功能会对已存储历史点进行组合调用外部预测服务
-6. 访问 `/alerts/board` 查看预警监控大屏，了解系统预警状态
+## Core Usage Flow
+1. Open http://localhost:8080/data, initially may have no devices
+2. Add device via page or API, provide name, protocol(opcua), connectionString (OPC UA connection string, e.g.: opc.tcp://127.0.0.1:53530/OPCUA/SimulationServer)
+3. Browse Namespace (call `/data/api/{deviceId}/namespaces` and `/data/api/{deviceId}/namespaces/{nsIndex}/tags`) to select required node addresses
+4. Quick add Tag (address is OPC UA node ID)
+5. Page will periodically refresh to display latest values; prediction feature will combine stored historical points to call external prediction service
+6. Visit `/alerts/board` to view alert monitoring dashboard and understand system alert status
 
 ---
-## 主要 REST API 列表（节选）
-所有响应为 JSON（除重定向与 HTML 页面）。示例 curl：
+## Main REST API List (Selected)
+All responses are JSON (except redirects and HTML pages). Example curl:
 
-**数据查询接口**：
-- 获取实时快照：
+**Data Query Endpoints**:
+- Get real-time snapshot:
 ```bash
 curl http://localhost:8080/data/api/latest
 ```
-- 获取 Tag 历史：
+- Get tag history:
 ```bash
 curl http://localhost:8080/data/api/history/{deviceId}/{tagId}
 ```
-- 预测：
+- Prediction:
 ```bash
 curl http://localhost:8080/data/api/predict/{deviceId}/{tagId}
 ```
 
-**设备管理接口**：
-- 添加设备：
+**Device Management Endpoints**:
+- Add device:
 ```bash
 curl -X POST http://localhost:8080/data/api/devices \
   -H "Content-Type: application/json" \
   -d '{"name":"DeviceA","protocol":"opcua","connectionString":"opc.tcp://127.0.0.1:4840"}'
 ```
-- 更新设备：
+- Update device:
 ```bash
 curl -X PUT http://localhost:8080/data/api/devices/{deviceId} \
   -H "Content-Type: application/json" \
   -d '{"name":"DeviceA2","protocol":"opcua","connectionString":"opc.tcp://127.0.0.1:4840"}'
 ```
-- 删除设备：
+- Delete device:
 ```bash
 curl -X DELETE http://localhost:8080/data/api/devices/{deviceId}
 ```
 
-**Tag管理接口**：
-- 列出某设备 Tag：
+**Tag Management Endpoints**:
+- List device tags:
 ```bash
 curl http://localhost:8080/data/api/{deviceId}/tags
 ```
-- 快速添加 Tag：
+- Quick add tag:
 ```bash
 curl -X POST http://localhost:8080/data/api/{deviceId}/tags \
   -H "Content-Type: application/json" \
   -d '{"name":"Temp","address":"ns=2;i=10845"}'
 ```
-- 更新 Tag：
+- Update tag:
 ```bash
 curl -X PUT http://localhost:8080/data/api/{deviceId}/tags/{tagId} \
   -H "Content-Type: application/json" \
   -d '{"name":"Temp2","address":"ns=2;i=10845"}'
 ```
-- 删除 Tag：
+- Delete tag:
 ```bash
 curl -X DELETE http://localhost:8080/data/api/{deviceId}/tags/{tagId}
 ```
 
-**OPC UA浏览接口**：
-- 查询命名空间：
+**OPC UA Browsing Endpoints**:
+- Query namespaces:
 ```bash
 curl http://localhost:8080/data/api/{deviceId}/namespaces
 ```
-- 查询命名空间 Tag：
+- Query namespace tags:
 ```bash
 curl http://localhost:8080/data/api/{deviceId}/namespaces/{nsIndex}/tags
 ```
 
-**预警接口**：
-- 获取活动预警列表：
+**Alert Endpoints**:
+- Get active alerts list:
 ```bash
 curl http://localhost:8080/data/api/alerts
 ```
-- 获取最近预警列表：
+- Get recent alerts list:
 ```bash
 curl http://localhost:8080/data/api/alerts/recent
 ```
-- 获取预警统计信息：
+- Get alert statistics:
 ```bash
 curl http://localhost:8080/data/api/alerts/stats
 ```
-- 确认预警：
+- Acknowledge alert:
 ```bash
 curl -X POST http://localhost:8080/data/api/alerts/{alertId}/ack
 ```
-- 忽略预警：
+- Ignore alert:
 ```bash
 curl -X POST http://localhost:8080/data/api/alerts/{alertId}/ignore
 ```
 
-更多字段说明请访问 OpenAPI UI。
+For more field descriptions, please visit OpenAPI UI.
 
 ---
-## 预测服务对接说明
-应用不会自行训练模型，而是将一段历史数据（长度由 `AVC_PREDICT_API_HISTORY_LENGTH` 控制）发送到 `AVC_PREDICT_API_URL`，期望返回预测序列（长度 `AVC_PREDICT_API_PREDICTION_LENGTH`）。若预测失败或异常，接口返回空结构（TimeSeriesDataModelRsp.empty()）。
+## Prediction Service Integration Instructions
+The application does not train models itself, but sends a segment of historical data (length controlled by `AVC_PREDICT_API_HISTORY_LENGTH`) to `AVC_PREDICT_API_URL`, expecting a prediction sequence (length `AVC_PREDICT_API_PREDICTION_LENGTH`) in return. If prediction fails or errors, the interface returns an empty structure (TimeSeriesDataModelRsp.empty()).
 
-**预测缓存机制**：
-- 系统通过 `PredictionCacheService` 定期预取预测结果，避免每次查询时实时调用预测服务
-- 缓存配置参数：
-  - `AVC_PREDICT_CACHE_ENABLED`：启用/禁用预测缓存（默认 true）
-  - `AVC_PREDICT_CACHE_PREFETCH_INTERVAL_MS`：预取间隔（默认 30 秒）
-  - `AVC_PREDICT_CACHE_MIN_AHEAD_MINUTES`：预测覆盖最少提前分钟数（默认 2 分钟）
-  - `AVC_PREDICT_CACHE_TOLERANCE_MS`：时间匹配容差（默认 30 秒）
-  - `AVC_PREDICT_CACHE_MAX_POINTS_PER_TAG`：每个Tag最大缓存点数（默认 5000）
+**Prediction Cache Mechanism**:
+- System periodically prefetches prediction results through `PredictionCacheService`, avoiding real-time calls to prediction service on every query
+- Cache configuration parameters:
+  - `AVC_PREDICT_CACHE_ENABLED`: Enable/disable prediction cache (default true)
+  - `AVC_PREDICT_CACHE_PREFETCH_INTERVAL_MS`: Prefetch interval (default 30 seconds)
+  - `AVC_PREDICT_CACHE_MIN_AHEAD_MINUTES`: Minimum ahead minutes for prediction coverage (default 2 minutes)
+  - `AVC_PREDICT_CACHE_TOLERANCE_MS`: Time matching tolerance (default 30 seconds)
+  - `AVC_PREDICT_CACHE_MAX_POINTS_PER_TAG`: Maximum cache points per tag (default 5000)
 
-[预测服务工程地址](../aiot-vision-collector-forecast)
+[Prediction Service Project](../aiot-vision-collector-forecast)
 
-集成建议：
-- 确保预测服务可用并按约定返回 JSON
-- 使用健康探测脚本定期检测预测端
-- 在容器中通过环境变量指向预测服务（如 192.168.1.4:50000）
+Integration suggestions:
+- Ensure prediction service is available and returns JSON as agreed
+- Use health probe scripts to periodically detect prediction endpoint
+- Point to prediction service via environment variables in container (e.g., 192.168.1.4:50000)
 
 ---
-## 测试
-运行全部测试：
+## Testing
+Run all tests:
 ```bash
 mvn test
 ```
-生成覆盖率（可自行集成 Jacoco）：
+Generate coverage (can integrate Jacoco):
 ```bash
 mvn clean test
 ```
 
 ---
-## 常见问题 & 排错 (Troubleshooting)
-1. 启动端口被占用
-   - 现象：`Web server failed to start` / `Address already in use`
-   - 处理：修改 `AVC_SERVER_PORT` 或释放端口。
-2. H2 数据库锁 / 启动失败
-   - 现象：`Database ... is already in use`。
-   - 处理：确认无旧进程占用；或删除 `./data/visiondb.*`（注意先备份）。
-3. 预测接口返回空数据
-   - 现象：预测 JSON 为空数组。
-   - 处理：检查预测服务 URL、网络连通性和服务日志；查看应用日志中 `Prediction failed` 相关错误。
-4. OPC UA 无法连接
-   - 现象：设备 connectionOk=false。
-   - 处理：验证 OPC UA 端点可达、证书策略（当前示例可能使用默认信任策略），确认 connectionString 正确。
-5. Lombok 注解未生效（IDE 报错）
-   - 处理：安装 Lombok 插件并启用 Annotation Processing。
-6. Docker 映射数据未持久化
-   - 处理：确保 `-v <host>/data:/data`（映射到容器的 /data 目录），检查容器内写权限。
-7. 时序写入/IoTDB 相关异常
-   - 处理：确认 IoTDB 服务在线、用户名密码正确；必要时降低批量写频率或增加日志级别 DEBUG 检查细节。
-8. OpenAPI 页面 404
-   - 处理：确认依赖版本；访问 `/swagger-ui/index.html` 而非旧版路径；查看日志中是否有加载错误。
-9. Maven 构建失败 (依赖下载慢)
-   - 处理：配置国内镜像仓库（如阿里云）或启用本地代理。
-10. Windows 路径编码问题
-    - 处理：确认系统默认编码 UTF-8；必要时在 JVM 启动参数加 `-Dfile.encoding=UTF-8`。
+## FAQ & Troubleshooting
+1. Startup port occupied
+   - Symptom: `Web server failed to start` / `Address already in use`
+   - Solution: Modify `AVC_SERVER_PORT` or release port.
+2. H2 database lock / startup failure
+   - Symptom: `Database ... is already in use`.
+   - Solution: Confirm no old process occupying; or delete `./data/visiondb.*` (backup first).
+3. Prediction interface returns empty data
+   - Symptom: Prediction JSON is empty array.
+   - Solution: Check prediction service URL, network connectivity and service logs; view application logs for `Prediction failed` related errors.
+4. OPC UA connection failure
+   - Symptom: Device connectionOk=false.
+   - Solution: Verify OPC UA endpoint reachable, certificate policy (current example may use default trust policy), confirm connectionString correct.
+5. Lombok annotations not working (IDE errors)
+   - Solution: Install Lombok plugin and enable Annotation Processing.
+6. Docker mapped data not persisted
+   - Solution: Ensure `-v <host>/data:/data` (map to container's /data directory), check write permissions in container.
+7. Time-series write/IoTDB related exceptions
+   - Solution: Confirm IoTDB service online, username password correct; reduce batch write frequency if necessary or increase log level DEBUG to check details.
+8. OpenAPI page 404
+   - Solution: Confirm dependency version; access `/swagger-ui/index.html` instead of old path; check logs for loading errors.
+9. Maven build failure (slow dependency download)
+   - Solution: Configure domestic mirror repository (e.g., Alibaba Cloud) or enable local proxy.
+10. Windows path encoding issues
+    - Solution: Confirm system default encoding UTF-8; add `-Dfile.encoding=UTF-8` to JVM startup parameters if necessary.
 
-收集日志（Windows PowerShell）：
+Collect logs (Windows PowerShell):
 ```powershell
 $env:AVC_LOGGING_LEVEL_APP="DEBUG"
 mvn spring-boot:run
 ```
 
 ---
-## 安全建议
-- 生产环境禁用 H2 Console：`AVC_H2_CONSOLE_ENABLED=false`
-- 使用外部数据库或时序库替代默认 H2 文件
-- 对管理与写入接口增加认证（可集成 Spring Security）
-- 日志避免打印敏感字段（如密码）
+## Security Recommendations
+- Disable H2 Console in production: `AVC_H2_CONSOLE_ENABLED=false`
+- Use external database or time-series database to replace default H2 file
+- Add authentication to management and write interfaces (can integrate Spring Security)
+- Avoid printing sensitive fields in logs (e.g., passwords)
 
 ---
-## 性能与扩展
-- 对高频数据：建议切换至 IoTDB/TimescaleDB 等，抽象 DataStorageService 实现
-- 添加缓存：可在读取最新值时引入 Caffeine/Redis
-- 预测调用：可异步化 + 结果缓存
-- 水平扩展：外置数据库 + 共享缓存，前置负载均衡
+## Performance & Scalability
+- For high-frequency data: recommend switching to IoTDB/TimescaleDB, etc., abstract DataStorageService implementation
+- Add caching: can introduce Caffeine/Redis when reading latest values
+- Prediction calls: can be asynchronous + result caching
+- Horizontal scaling: external database + shared cache, front-end load balancing
 
 ---
-## 发布与版本
-POM 当前版本：0.0.1-SNAPSHOT。发布时建议：
-1. 更新变更日志 CHANGELOG.md
-2. 使用 Git Tag（例如 v0.1.0）
-3. 上传构建产物 / Docker 镜像
+## Release & Version
+POM current version: 0.0.1-SNAPSHOT. Recommended for release:
+1. Update changelog CHANGELOG.md
+2. Use Git Tag (e.g., v0.1.0)
+3. Upload build artifacts / Docker images
 
 ---
-## 许可证
-可根据业务需要选择合适的开源许可证（MIT/Apache-2.0/GPLv3 等）。示例：
+## License
+You can choose an appropriate open source license according to business needs (MIT/Apache-2.0/GPLv3, etc.). Example:
 ```
 Copyright (c) <Year> <Owner>
 ```
 
 ---
-## 贡献指南 (简要)
-1. Fork & 新建分支 feature/xxx
-2. 编码并补充测试
-3. 通过 `mvn test` 确认通过
-4. 提交 PR，描述变更与影响
+## Contributing Guidelines (Brief)
+1. Fork & create branch feature/xxx
+2. Code and add tests
+3. Confirm passing via `mvn test`
+4. Submit PR, describe changes and impact
 
 ---
-## 联系与反馈
-- 问题单：Issue Tracker
-- 功能建议：提交 Feature Request
-- 日志/复现：附加 `DEBUG` 日志与配置截屏
+## Contact & Feedback
+- Issues: Issue Tracker
+- Feature requests: Submit Feature Request
+- Logs/reproduction: Attach `DEBUG` logs and configuration screenshots
 
-祝您使用顺利！
+Wish you smooth usage!
 
 ---
-## 预警监控大屏 (Alerts Board)
+## Alert Monitoring Dashboard (Alerts Board)
 
-访问页面：`/alerts/board`
+Access page: `/alerts/board`
 
-设计原则（简约风格）：
-- **信息聚焦**：只保留核心指标（活动预警数、24h新增、严重级别分布、近12小时趋势）
-- **视觉克制**：统一配色体系下的少量强调色（Accent / Danger / Warn / OK）
-- **层次清晰**：栅格化卡片 + 轻量阴影，不使用复杂装饰
-- **动态刷新**：前端每 10 秒自动拉取最新统计与活动预警列表，页面隐藏时暂停刷新以降低资源消耗
+Design principles (minimalist style):
+- **Information Focus**: Only retain core metrics (active alerts, 24h new, severity distribution, recent 12-hour trend)
+- **Visual Restraint**: Limited accent colors under unified color scheme (Accent / Danger / Warn / OK)
+- **Clear Hierarchy**: Grid-based cards + lightweight shadows, no complex decorations
+- **Dynamic Refresh**: Frontend automatically fetches latest statistics and active alert list every 10 seconds, pauses refresh when page is hidden to reduce resource consumption
 
-主要 REST 接口：
-- `GET /data/api/alerts` - 活动预警列表
-- `GET /data/api/alerts/recent` - 最近预警列表
-- `GET /data/api/alerts/stats` - 统计指标（活动数量、24h新增、严重级别分布、近12小时趋势）
-- `POST /data/api/alerts/{id}/ack` - 确认预警
-- `POST /data/api/alerts/{id}/ignore` - 忽略预警
+Main REST endpoints:
+- `GET /data/api/alerts` - Active alerts list
+- `GET /data/api/alerts/recent` - Recent alerts list
+- `GET /data/api/alerts/stats` - Statistics metrics (active count, 24h new, severity distribution, recent 12-hour trend)
+- `POST /data/api/alerts/{id}/ack` - Acknowledge alert
+- `POST /data/api/alerts/{id}/ignore` - Ignore alert
 
-统计结构示例：
+Statistics structure example:
 ```json
 {
   "activeCount": 3,
@@ -392,11 +394,12 @@ Copyright (c) <Year> <Owner>
 }
 ```
 
-前端文件：
-- `src/main/resources/static/js/alerts-enhanced.js` - 预警大屏交互逻辑
-- `src/main/resources/templates/alerts-board.html` - 预警大屏页面模板
-- `src/main/resources/static/css/app.css` - 样式定义（`.board-*` / `.severity-chip` / `.alert-item-row` 等）
+Frontend files:
+- `src/main/resources/static/js/alerts-enhanced.js` - Alert dashboard interaction logic
+- `src/main/resources/templates/alerts-board.html` - Alert dashboard page template
+- `src/main/resources/static/css/app.css` - Style definitions (`.board-*` / `.severity-chip` / `.alert-item-row`, etc.)
 
-测试：
-- `AlertStatsApiTest` 验证统计接口结构（小时桶固定为 12）
-- `AlertBoardViewControllerTest` 验证页面访问
+Testing:
+- `AlertStatsApiTest` validates statistics interface structure (hour buckets fixed at 12)
+- `AlertBoardViewControllerTest` validates page access
+
